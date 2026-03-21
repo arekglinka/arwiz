@@ -268,3 +268,164 @@ def test_when_function_not_found_in_hotspots(tmp_path: Path) -> None:
 
     assert result.best_attempt is None
     assert "not found in detected hotspots" in (result.attempts[0].error_message or "")
+
+
+class ConditionalEquivalenceChecker:
+    def __init__(self, results: list[tuple[bool, str]]) -> None:
+        self._results = list(results)
+        self._idx = 0
+
+    def check_equivalence(  # noqa: ANN001, ARG002
+        self, original, optimized, tolerance=1e-6
+    ):
+        result = self._results[self._idx]
+        self._idx += 1
+        return result
+
+
+class TrackingLlmOptimizer(DummyLlmOptimizer):
+    def __init__(self) -> None:
+        super().__init__("")
+        self.called = False
+
+    def optimize_function(self, source_code, hotspot, config=None):  # noqa: ANN001
+        self.called = True
+        return super().optimize_function(source_code, hotspot, config)
+
+
+class FailingConfigLoader:
+    def load_config(self, config_path=None):  # noqa: ANN001, ARG002
+        msg = "should not be called when config is provided"
+        raise RuntimeError(msg)
+
+
+class TestAutoStrategy:
+    def test_auto_falls_back_to_llm_when_template_fails(self, tmp_path: Path) -> None:
+        script = _write_script(tmp_path, "def target(x):\n    return x + 1\n")
+        profiler_result = _profile_result(script)
+        hotspot = _hotspot("target", script)
+        llm_opt = DummyLlmOptimizer("def target(x):\n    return x + 1\n")
+        orchestrator = DefaultOrchestrator(
+            config_loader=DummyConfigLoader(),
+            profiler=DummyProfiler(profile_result=profiler_result),
+            hotspot_detector=DummyHotspotDetector([hotspot]),
+            template_optimizer=DummyTemplateOptimizer("def target(x):\n    return x + 2\n"),
+            llm_optimizer=llm_opt,
+            equivalence_checker=ConditionalEquivalenceChecker(
+                [(False, "output mismatch"), (True, "")]
+            ),
+        )
+
+        result = orchestrator.run_profile_optimize_pipeline(
+            script_path=str(script),
+            function_name="target",
+            strategy="auto",
+        )
+
+        assert result.best_attempt is not None
+        assert result.best_attempt.strategy == "llm_generated"
+        assert len(result.attempts) == 2
+        assert result.attempts[0].strategy == "template"
+        assert result.attempts[0].passed_equivalence is False
+
+    def test_auto_uses_template_when_template_succeeds(self, tmp_path: Path) -> None:
+        script = _write_script(tmp_path, "def target(x):\n    return x + 1\n")
+        profiler_result = _profile_result(script)
+        hotspot = _hotspot("target", script)
+        tracking_llm = TrackingLlmOptimizer()
+        orchestrator = DefaultOrchestrator(
+            config_loader=DummyConfigLoader(),
+            profiler=DummyProfiler(profile_result=profiler_result),
+            hotspot_detector=DummyHotspotDetector([hotspot]),
+            template_optimizer=DummyTemplateOptimizer("def target(x):\n    return x + 1\n"),
+            llm_optimizer=tracking_llm,
+            equivalence_checker=ConditionalEquivalenceChecker([(True, "")]),
+        )
+
+        result = orchestrator.run_profile_optimize_pipeline(
+            script_path=str(script),
+            function_name="target",
+            strategy="auto",
+        )
+
+        assert result.best_attempt is not None
+        assert result.best_attempt.strategy == "template"
+        assert len(result.attempts) == 1
+        assert tracking_llm.called is False
+
+    def test_coverage_pipeline_records_all_steps(self, tmp_path: Path) -> None:
+        script = _write_script(tmp_path, "def main():\n    return 1\n")
+        coverage = BranchCoverage(
+            total_branches=1,
+            covered_branches=1,
+            coverage_percent=100.0,
+            uncovered_lines=[],
+            branch_details=[
+                BranchInfo(line_number=1, branch_type="if", condition="", taken=True),
+            ],
+            script_path=str(script),
+            duration_ms=1.0,
+        )
+        tracer = DummyCoverageTracer(coverage)
+        orchestrator = DefaultOrchestrator(
+            config_loader=DummyConfigLoader(), coverage_tracer=tracer
+        )
+
+        orchestrator.run_coverage_replay_pipeline(str(script))
+
+        state = orchestrator.last_pipeline_state
+        assert state is not None
+        step_names = [s.name for s in state.steps]
+        assert step_names == [
+            "load_config",
+            "trace_branches",
+            "get_uncovered_branches",
+        ]
+        assert all(s.status == "completed" for s in state.steps)
+        assert all(s.duration_ms > 0 for s in state.steps)
+
+    def test_custom_config_used_by_pipeline(self, tmp_path: Path) -> None:
+        script = _write_script(tmp_path, "def target(x):\n    return x + 1\n")
+        profiler_result = _profile_result(script)
+        hotspot = _hotspot("target", script)
+        custom_cfg = ArwizConfig(equivalence_tolerance=0.01)
+        orchestrator = DefaultOrchestrator(
+            config_loader=FailingConfigLoader(),
+            profiler=DummyProfiler(profile_result=profiler_result),
+            hotspot_detector=DummyHotspotDetector([hotspot]),
+            template_optimizer=DummyTemplateOptimizer("def target(x):\n    return x + 1\n"),
+            equivalence_checker=DummyEquivalenceChecker(equivalent=True),
+        )
+
+        result = orchestrator.run_profile_optimize_pipeline(
+            script_path=str(script),
+            function_name="target",
+            strategy="template",
+            config=custom_cfg,
+        )
+
+        assert result.best_attempt is not None
+        assert result.best_attempt.passed_equivalence is True
+
+    def test_empty_hotspot_list_handled_gracefully(self, tmp_path: Path) -> None:
+        script = _write_script(tmp_path, "def target(x):\n    return x\n")
+        orchestrator = DefaultOrchestrator(
+            config_loader=DummyConfigLoader(),
+            profiler=DummyProfiler(),
+            hotspot_detector=DummyHotspotDetector([]),
+        )
+
+        result = orchestrator.run_profile_optimize_pipeline(
+            script_path=str(script),
+            function_name="target",
+        )
+
+        assert result.best_attempt is None
+        assert len(result.attempts) == 1
+        assert "not found" in (result.attempts[0].error_message or "")
+        state = orchestrator.last_pipeline_state
+        assert state is not None
+        step_names = [s.name for s in state.steps]
+        assert "detect_hotspots" in step_names
+        assert "find_target_hotspot" in step_names
+        assert state.steps[-1].status == "failed"

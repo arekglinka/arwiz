@@ -38,6 +38,110 @@ Trace branch coverage:
 $ arwiz coverage my_script.py --store-inputs
 ```
 
+## Examples
+
+The `examples/` directory contains runnable demo scripts:
+
+| File | Description |
+|------|-------------|
+| `examples/01_quickstart.py` | Simple loop -- good starting point for profiling and template optimization |
+| `examples/02_real_world.py` | Pandas data processing with slow `iterrows` and `apply` patterns |
+| `examples/03_api_usage.py` | Programmatic API usage and FastAPI client example |
+| `examples/api_curl.sh` | curl examples for all 4 API endpoints |
+
+Try the quickstart:
+
+```bash
+# Profile the example script
+$ arwiz profile examples/01_quickstart.py
+
+# Optimize the compute_sum function using templates
+$ arwiz optimize examples/01_quickstart.py --function compute_sum --strategy template
+
+# Trace branch coverage
+$ arwiz coverage examples/01_quickstart.py
+```
+
+### Using as a Python library
+
+```python
+from arwiz.orchestrator import DefaultOrchestrator
+
+orch = DefaultOrchestrator()
+result = orch.run_profile_optimize_pipeline(
+    script_path="my_script.py",
+    function_name="slow_function",
+    strategy="auto",
+)
+if result.best_attempt:
+    print(result.best_attempt.optimized_code)
+```
+
+### REST API
+
+Start the server, then hit the endpoints:
+
+```bash
+$ uvicorn arwiz.api:app --reload
+```
+
+```bash
+# Health check
+$ curl http://localhost:8000/health
+
+# Profile a script
+$ curl -X POST http://localhost:8000/profile \
+    -H "Content-Type: application/json" \
+    -d '{"script_path": "examples/01_quickstart.py"}'
+
+# Optimize a function
+$ curl -X POST http://localhost:8000/optimize \
+    -H "Content-Type: application/json" \
+    -d '{"script_path": "examples/01_quickstart.py", "function_name": "compute_sum", "strategy": "template"}'
+
+# Trace coverage
+$ curl -X POST http://localhost:8000/coverage \
+    -H "Content-Type: application/json" \
+    -d '{"script_path": "examples/01_quickstart.py"}'
+```
+
+## Configuration
+
+arwiz looks for configuration in this order (later overrides earlier):
+
+1. Built-in defaults (50% speedup threshold, auto-detect RAM)
+2. `.arwiz/config.toml` in the project directory
+3. Environment variables prefixed with `ARWIZ_`
+
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ARWIZ_TIMEOUT` | `30` | Script execution timeout in seconds |
+| `ARWIZ_MEMORY_LIMIT` | `auto` | Memory limit (bytes or `auto` for 50% of RAM) |
+| `ARWIZ_SPEEDUP_THRESHOLD` | `50` | Minimum speedup % to accept an optimization |
+| `ARWIZ_LLM_PROVIDER` | `openai` | LLM provider: `openai`, `anthropic`, `ollama` |
+| `ARWIZ_LLM_MODEL` | `gpt-4o` | Model name for the selected provider |
+| `ARWIZ_LLM_API_KEY` | -- | API key for the LLM provider |
+| `ARWIZ_LLM_BASE_URL` | -- | Custom base URL (useful for self-hosted models) |
+
+### Example config file
+
+```toml
+# .arwiz/config.toml
+[profiling]
+timeout = 60
+memory_limit = "auto"
+
+[optimization]
+speedup_threshold = 50
+
+[llm]
+provider = "ollama"
+model = "llama3"
+base_url = "http://localhost:11434/v1"
+```
+
 ## Testing
 
 ### Run all tests
@@ -100,7 +204,7 @@ $ uv run pytest --cov=arwiz --cov-report=term-missing
 | `test/integration/` | End-to-end pipeline tests |
 | `test/test_architecture.py` | AST-based architecture validation |
 
-286 tests across 24 test files.
+322 tests across 24 test files.
 
 ### Things to know
 
@@ -158,11 +262,16 @@ arwiz/
     cli/                   # Click-based CLI
     streamlit_ui/          # Streamlit dashboard
     api/                   # FastAPI REST API
-  test/                    # 286 tests
+  test/                    # 322 tests
     foundation/types/      # Model validation tests
     fixtures/              # Target scripts and fixtures
     components/            # Component unit tests
     bases/                 # Entry point tests
     integration/           # End-to-end tests
     test_architecture.py   # Architecture validation
+  examples/                # Runnable demo scripts
+    01_quickstart.py       # Simple loop profiling demo
+    02_real_world.py       # Pandas data processing demo
+    03_api_usage.py        # Programmatic API usage
+    api_curl.sh            # curl examples for REST API
 ```

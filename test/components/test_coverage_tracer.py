@@ -105,3 +105,70 @@ class TestGetUncoveredBranches:
             duration_ms=1.0,
         )
         assert tracer.get_uncovered_branches(fake) == []
+
+
+class TestEdgeCases:
+    def test_try_except_detection(self, tmp_path: Path) -> None:
+        script = tmp_path / "try_except.py"
+        script.write_text(
+            "try:\n"
+            "    x = 1\n"
+            "except ValueError:\n"
+            "    x = 2\n"
+            "except Exception:\n"
+            "    x = 3\n"
+            "finally:\n"
+            "    x = 4\n"
+        )
+        branches = get_static_branches(script)
+        branch_types = {bt for _, bt in branches}
+        assert "try" in branch_types
+        assert "except" in branch_types
+        assert "finally" in branch_types
+
+    def test_while_loop_detection(self, tmp_path: Path) -> None:
+        script = tmp_path / "while_loop.py"
+        script.write_text("x = 0\nwhile x < 10:\n    x += 1\n")
+        branches = get_static_branches(script)
+        branch_types = {bt for _, bt in branches}
+        assert "while" in branch_types
+        assert len(branches) >= 1
+
+    def test_deeply_nested_if_elif_else(self, tmp_path: Path) -> None:
+        script = tmp_path / "nested.py"
+        script.write_text(
+            "if True:\n"
+            "    if False:\n"
+            "        pass\n"
+            "    elif True:\n"
+            "        if None:\n"
+            "            pass\n"
+            "        else:\n"
+            "            pass\n"
+            "    else:\n"
+            "        pass\n"
+            "else:\n"
+            "    pass\n"
+        )
+        branches = get_static_branches(script)
+        branch_types = {bt for _, bt in branches}
+        assert "if" in branch_types
+        assert "elif" in branch_types
+        assert "else" in branch_types
+        assert len(branches) >= 5
+
+    def test_no_branches_plain_assignments(self, tmp_path: Path) -> None:
+        script = tmp_path / "plain.py"
+        script.write_text("x = 1\ny = 2\nz = x + y\n")
+        branches = get_static_branches(script)
+        assert branches == []
+
+    def test_nonexistent_file_raises(self, tmp_path: Path) -> None:
+        with pytest.raises(FileNotFoundError):
+            get_static_branches(tmp_path / "does_not_exist.py")
+
+    def test_invalid_syntax_raises(self, tmp_path: Path) -> None:
+        script = tmp_path / "bad_syntax.py"
+        script.write_text("def foo(\n")
+        with pytest.raises(SyntaxError):
+            get_static_branches(script)

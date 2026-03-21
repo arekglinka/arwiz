@@ -1,4 +1,5 @@
 import importlib.util
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -15,6 +16,11 @@ if fastapi_available:
 @pytest.fixture
 def client():
     return TestClient(app)
+
+
+@pytest.fixture
+def client_no_raise():
+    return TestClient(app, raise_server_exceptions=False)
 
 
 _FAKE_PROFILE_RESULT = MagicMock(
@@ -142,3 +148,104 @@ def test_coverage(mock_tracer_cls, client):
 def test_profile_missing_script_path(client):
     resp = client.post("/profile", json={})
     assert resp.status_code == 422
+
+
+@pytest.mark.integration
+class TestErrorHandling:
+    def test_profile_nonexistent_script(self, client_no_raise):
+        """POST /profile with nonexistent script_path → 500."""
+        with patch("arwiz.api.routes.profile.DefaultProfiler") as mock_p:
+            mock_p.return_value.profile_script.side_effect = FileNotFoundError("No such file")
+            resp = client_no_raise.post("/profile", json={"script_path": "/nonexistent/file.py"})
+        assert resp.status_code == 500
+
+    def test_profile_empty_script_path(self, client_no_raise):
+        """POST /profile with empty string script_path → 500."""
+        with patch("arwiz.api.routes.profile.DefaultProfiler") as mock_p:
+            mock_p.return_value.profile_script.side_effect = ValueError(
+                "script_path cannot be empty"
+            )
+            resp = client_no_raise.post("/profile", json={"script_path": ""})
+        assert resp.status_code == 500
+
+    def test_profile_args_wrong_type(self, client):
+        """POST /profile with args as string instead of list → 422."""
+        resp = client.post(
+            "/profile",
+            json={"script_path": "test.py", "args": "not-a-list"},
+        )
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert any("args" in str(e) for e in detail)
+
+    def test_profile_wrong_method(self, client):
+        """GET /profile (wrong HTTP method) → 405."""
+        resp = client.get("/profile")
+        assert resp.status_code == 405
+
+    def test_optimize_missing_function_name(self, client):
+        """POST /optimize without function_name → 422."""
+        resp = client.post("/optimize", json={"script_path": "test.py"})
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert any("function_name" in str(e) for e in detail)
+
+    def test_optimize_empty_body(self, client):
+        """POST /optimize with empty body {} → 422."""
+        resp = client.post("/optimize", json={})
+        assert resp.status_code == 422
+
+    def test_optimize_invalid_strategy(self, client_no_raise):
+        """POST /optimize with unknown strategy → 500."""
+        with (
+            patch.object(Path, "read_text", return_value="def foo(): pass"),
+            patch("arwiz.api.routes.optimize.DefaultTemplateOptimizer") as mock_opt,
+        ):
+            mock_opt.return_value.apply_template.side_effect = ValueError(
+                "Unknown template: bad_strategy"
+            )
+            resp = client_no_raise.post(
+                "/optimize",
+                json={
+                    "script_path": "test.py",
+                    "function_name": "foo",
+                    "strategy": "bad_strategy",
+                },
+            )
+        assert resp.status_code == 500
+
+    def test_coverage_nonexistent_script(self, client_no_raise):
+        """POST /coverage with nonexistent script_path → 500."""
+        with patch("arwiz.api.routes.coverage.DefaultCoverageTracer") as mock_t:
+            mock_t.return_value.trace_branches.side_effect = FileNotFoundError("No such file")
+            resp = client_no_raise.post(
+                "/coverage",
+                json={"script_path": "/nonexistent/file.py"},
+            )
+        assert resp.status_code == 500
+
+    def test_coverage_empty_body(self, client):
+        """POST /coverage with empty body {} → 422."""
+        resp = client.post("/coverage", json={})
+        assert resp.status_code == 422
+
+    def test_health_version_format(self, client):
+        """GET /health returns semver-compatible version string."""
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        version = resp.json()["version"]
+        assert re.match(r"\d+\.\d+\.\d+", version), f"Version '{version}' is not semver-like"
+
+    def test_nonexistent_route_404(self, client):
+        """GET /nonexistent → 404."""
+        resp = client.get("/nonexistent")
+        assert resp.status_code == 404
+
+    def test_malformed_json_body(self, client):
+        """POST with malformed JSON payload → 422."""
+        resp = client.post(
+            "/profile",
+            content=b"this is not json",
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status_code == 422

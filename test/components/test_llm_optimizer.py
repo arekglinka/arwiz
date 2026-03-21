@@ -1,3 +1,4 @@
+import httpx
 import pytest
 from arwiz.foundation import HotSpot, LLMConfig
 from arwiz.llm_optimizer.core import DefaultLLMOptimizer
@@ -113,3 +114,102 @@ def test_optimize_function_handles_invalid_code(hotspot: HotSpot) -> None:
 
     assert attempt.syntax_valid is False
     assert attempt.error_message
+
+
+class EmptyMockProvider:
+    def generate(self, _prompt: str, _model: str, **kwargs: object) -> str:  # noqa: ARG002
+        return ""
+
+
+class TimeoutMockProvider:
+    def generate(self, _prompt: str, _model: str, **kwargs: object) -> str:  # noqa: ARG002
+        raise httpx.TimeoutException("request timed out")
+
+
+class NoCodeBlockProvider:
+    def generate(self, _prompt: str, _model: str, **kwargs: object) -> str:  # noqa: ARG002
+        return "I cannot optimize this code. Sorry."
+
+
+class MultiCodeBlockProvider:
+    def generate(self, _prompt: str, _model: str, **kwargs: object) -> str:  # noqa: ARG002
+        return (
+            "```python\n"
+            "def first_optimized(x):\n"
+            "    return x * 2\n"
+            "```\n"
+            "Explanation text\n"
+            "```python\n"
+            "def second_optimized(x):\n"
+            "    return x * 3\n"
+            "```\n"
+        )
+
+
+class TestProviderErrors:
+    def test_empty_provider_response(self, hotspot: HotSpot) -> None:
+        optimizer = DefaultLLMOptimizer()
+        optimizer.provider = EmptyMockProvider()
+        source = "def compute_sum(data):\n    return sum(data)"
+
+        attempt = optimizer.optimize_function(
+            source,
+            hotspot,
+            config=LLMConfig(provider="openai", model="gpt-4o", api_key_env_var="OPENAI_API_KEY"),
+        )
+
+        assert attempt.optimized_code == ""
+        assert attempt.syntax_valid is True
+        assert attempt.strategy == "llm_generated"
+
+    def test_provider_timeout_propagates(self, hotspot: HotSpot) -> None:
+        optimizer = DefaultLLMOptimizer()
+        optimizer.provider = TimeoutMockProvider()
+        source = "def compute_sum(data):\n    return sum(data)"
+
+        with pytest.raises(httpx.TimeoutException, match="request timed out"):
+            optimizer.optimize_function(
+                source,
+                hotspot,
+                config=LLMConfig(
+                    provider="openai", model="gpt-4o", api_key_env_var="OPENAI_API_KEY"
+                ),
+            )
+
+    def test_no_code_block_yields_error(self, hotspot: HotSpot) -> None:
+        optimizer = DefaultLLMOptimizer()
+        optimizer.provider = NoCodeBlockProvider()
+        source = "def compute_sum(data):\n    return sum(data)"
+
+        attempt = optimizer.optimize_function(
+            source,
+            hotspot,
+            config=LLMConfig(provider="openai", model="gpt-4o", api_key_env_var="OPENAI_API_KEY"),
+        )
+
+        assert attempt.syntax_valid is False
+        assert attempt.error_message is not None
+
+    def test_multiple_code_blocks_uses_first(self) -> None:
+        optimizer = DefaultLLMOptimizer()
+        response = (
+            "```python\ndef first_optimized(x):\n    return x * 2\n```\n"
+            "Explanation\n"
+            "```python\ndef second_optimized(x):\n    return x * 3\n```"
+        )
+        parsed = optimizer.parse_llm_response(response)
+
+        assert "def first_optimized" in parsed
+        assert "def second_optimized" not in parsed
+
+    def test_prompt_includes_full_hotspot_info(self, hotspot: HotSpot) -> None:
+        optimizer = DefaultLLMOptimizer()
+        source = "def compute_sum(data):\n    return sum(data)"
+        prompt = optimizer.generate_prompt(source, hotspot, strategy="caching")
+
+        assert hotspot.function_name in prompt
+        assert str(hotspot.self_time_ms) in prompt
+        assert str(hotspot.call_count) in prompt
+        assert str(hotspot.cumulative_time_ms) in prompt
+        assert hotspot.file_path in prompt
+        assert source in prompt
