@@ -25,9 +25,7 @@ def _node_from_stat(
 
 def parse_pstats(stats: pstats.Stats, script_path: str) -> ProfileResult:
     stats.calc_callees()
-    stats_map = cast(
-        "dict[tuple[str, int, str], tuple[int, int, float, float, dict]]", stats.stats
-    )
+    stats_map = cast("dict[tuple[str, int, str], tuple[int, int, float, float, dict]]", stats.stats)
     total_tt = float(getattr(stats, "total_tt", 0.0))
 
     callers_by_callee: dict[tuple[str, int, str], set[tuple[str, int, str]]] = {

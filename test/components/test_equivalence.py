@@ -1,6 +1,5 @@
 """Tests for arwiz.equivalence — Output equivalence checking."""
 
-
 import numpy as np
 import pytest
 from arwiz.equivalence.core import DefaultEquivalenceChecker

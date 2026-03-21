@@ -5,7 +5,6 @@ branch coverage detection.
 """
 
 
-
 def classify_value(x):
     """Classify a numeric value into categories."""
     if x < 0:
