@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-
 TARGETS_DIR = Path(__file__).parent / "targets"
 
 TARGET_NAMES = [

@@ -3,8 +3,6 @@
 from pathlib import Path
 
 import pytest
-
-from arwiz.foundation import InputSnapshot
 from arwiz.input_manager.core import DefaultInputManager
 
 

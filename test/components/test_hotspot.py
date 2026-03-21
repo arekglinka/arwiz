@@ -1,7 +1,6 @@
 """Tests for arwiz.hotspot — Hotspot detection and ranking."""
 
 import pytest
-
 from arwiz.foundation import HotSpot, ProfileResult
 from arwiz.hotspot.core import DefaultHotspotDetector
 

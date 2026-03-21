@@ -3,10 +3,7 @@ import tomllib
 from pathlib import Path
 
 import psutil
-
-from arwiz.config.interface import ConfigLoaderProtocol
-from arwiz.foundation import ArwizConfig, LLMConfig
-
+from arwiz.foundation import ArwizConfig
 
 _ENV_MEMORY = "ARWIZ_MEMORY_LIMIT_MB"
 _ENV_TIMEOUT = "ARWIZ_TIMEOUT_SECONDS"

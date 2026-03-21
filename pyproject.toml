@@ -40,6 +40,11 @@ dev-mode-dirs = ["components", "bases", "development", "."]
 "components/arwiz/hotspot" = "arwiz/hotspot"
 "components/arwiz/equivalence" = "arwiz/equivalence"
 "components/arwiz/input_manager" = "arwiz/input_manager"
+"components/arwiz/coverage_tracer" = "arwiz/coverage_tracer"
+"components/arwiz/decorator_injector" = "arwiz/decorator_injector"
+"components/arwiz/hot_reload" = "arwiz/hot_reload"
+"components/arwiz/llm_optimizer" = "arwiz/llm_optimizer"
+"components/arwiz/template_optimizer" = "arwiz/template_optimizer"
 
 [tool.pytest.ini_options]
 testpaths = ["test"]

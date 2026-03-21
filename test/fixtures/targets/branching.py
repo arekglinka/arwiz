@@ -4,7 +4,6 @@ This script has multiple conditional branches to test
 branch coverage detection.
 """
 
-import sys
 
 
 def classify_value(x):

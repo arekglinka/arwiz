@@ -195,7 +195,7 @@ class TestComponentInterfaceSeparation:
 
     @pytest.mark.skipif(not _has_components(), reason="No components exist yet")
     def test_components_import_interfaces_not_cores(self) -> None:
-        """Components should import from interfaces, not core implementations of other components."""
+        """Components should import from interfaces, not core impls of other components."""
         component_dirs = _component_dirs()
         component_names = {d.name for d in component_dirs}
 
@@ -217,7 +217,8 @@ class TestComponentInterfaceSeparation:
                         if target_component in component_names and import_type == "core":
                             pytest.fail(
                                 f"File {py_file} imports from {module}. "
-                                f"Should import from {NAMESPACE}.{target_component}.interface instead."
+                                f"Should import from "
+                                f"{NAMESPACE}.{target_component}.interface instead."
                             )
 
 
@@ -252,7 +253,6 @@ class TestDependencyDirection:
     @pytest.mark.skipif(not _has_components(), reason="No components exist yet")
     def test_components_can_import_foundation(self) -> None:
         """Components may import from foundation — this test documents the rule."""
-        component_dirs = _component_dirs()
         # This test always passes; it exists as documentation that components
         # importing foundation is ALLOWED.
         assert True

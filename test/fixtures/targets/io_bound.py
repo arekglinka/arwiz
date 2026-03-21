@@ -4,6 +4,7 @@ This script performs many small file writes that could
 benefit from batching.
 """
 
+import contextlib
 import os
 import tempfile
 import time
@@ -25,10 +26,8 @@ def write_results_individually(results, base_name="arwiz_test"):
 def cleanup_files(paths):
     """Remove temporary files."""
     for path in paths:
-        try:
+        with contextlib.suppress(OSError):
             os.remove(path)
-        except OSError:
-            pass
 
 
 def main():

@@ -1,10 +1,8 @@
 """Tests for arwiz.equivalence — Output equivalence checking."""
 
-import math
 
 import numpy as np
 import pytest
-
 from arwiz.equivalence.core import DefaultEquivalenceChecker
 from arwiz.equivalence.tolerance import arrays_close, deep_equal, is_close
 

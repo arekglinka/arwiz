@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
@@ -14,7 +14,7 @@ class OptimizationAttempt(BaseModel):
     passed_equivalence: bool = False
     speedup_percent: float = 0.0
     error_message: str | None = None
-    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class OptimizationResult(BaseModel):

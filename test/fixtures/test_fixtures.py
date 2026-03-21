@@ -7,11 +7,10 @@ and their main() functions are importable.
 from __future__ import annotations
 
 import importlib.util
-from pathlib import Path
 
 import pytest
 
-from .conftest import TARGETS_DIR, TARGET_NAMES
+from .conftest import TARGET_NAMES, TARGETS_DIR
 
 
 class TestTargetPathsExist:
