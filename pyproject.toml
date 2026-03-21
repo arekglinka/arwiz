@@ -36,6 +36,10 @@ dev-mode-dirs = ["components", "bases", "development", "."]
 "components/arwiz/foundation" = "arwiz/foundation"
 "components/arwiz/config" = "arwiz/config"
 "components/arwiz/process_manager" = "arwiz/process_manager"
+"components/arwiz/profiler" = "arwiz/profiler"
+"components/arwiz/hotspot" = "arwiz/hotspot"
+"components/arwiz/equivalence" = "arwiz/equivalence"
+"components/arwiz/input_manager" = "arwiz/input_manager"
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
