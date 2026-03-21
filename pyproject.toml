@@ -34,6 +34,8 @@ dev-mode-dirs = ["components", "bases", "development", "."]
 
 [tool.polylith.bricks]
 "components/arwiz/foundation" = "arwiz/foundation"
+"components/arwiz/config" = "arwiz/config"
+"components/arwiz/process_manager" = "arwiz/process_manager"
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
