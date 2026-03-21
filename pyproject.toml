@@ -33,6 +33,7 @@ members = ["projects/*"]
 dev-mode-dirs = ["components", "bases", "development", "."]
 
 [tool.polylith.bricks]
+"components/arwiz/foundation" = "arwiz/foundation"
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
