@@ -20,7 +20,12 @@ dependencies = [
     "ruff>=0.15.1",
     "pytest-cov>=7.0.0",
     "pytest-benchmark>=5.1.0",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
 ]
+
+[project.scripts]
+arwiz = "arwiz.cli:cli"
 
 [build-system]
 requires = ["hatchling"]
@@ -45,6 +50,10 @@ dev-mode-dirs = ["components", "bases", "development", "."]
 "components/arwiz/hot_reload" = "arwiz/hot_reload"
 "components/arwiz/llm_optimizer" = "arwiz/llm_optimizer"
 "components/arwiz/template_optimizer" = "arwiz/template_optimizer"
+"components/arwiz/orchestrator" = "arwiz/orchestrator"
+"bases/arwiz/cli" = "arwiz/cli"
+"bases/arwiz/streamlit_ui" = "arwiz/streamlit_ui"
+"bases/arwiz/api" = "arwiz/api"
 
 [tool.pytest.ini_options]
 testpaths = ["test"]

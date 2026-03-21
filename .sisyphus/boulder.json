@@ -1,0 +1,28 @@
+{
+  "active_plan": "/home/ag/wsp/arwiz/.sisyphus/plans/arwiz-init.md",
+  "started_at": "2026-03-21T14:36:18.260Z",
+  "session_ids": [
+    "ses_2ef570df9ffeE1y8v5ZQ3gO84H",
+    "ses_2ef2910a0ffeCsRUg2fDPLM5wA",
+    "ses_2ef1d5989ffedy5bA5NHz3011b",
+    "ses_2ef1d598bffe1JGuDzUeRbEuy3",
+    "ses_2ef1832f6ffemfgn2QFqe7jsEA",
+    "ses_2ef17f223ffeOzJC3ANYidJ8JR",
+    "ses_2ef17f221ffeKbFRmVgNdg5k1r",
+    "ses_2ef1244fdffebxKhAbPOI54lsP",
+    "ses_2eefecd92ffe3yGH5jaI1G3DLt",
+    "ses_2eefecd96ffeiwPcYMFp5PD6sD",
+    "ses_2eefb1122ffeQvgTTUyyLfHXkd",
+    "ses_2eefb1120ffeYa1I3Q0z8tTCqC",
+    "ses_2eeefbe40ffel6DItSlARqKE8X",
+    "ses_2eefd5c53ffeMrlaBtdjSrulR2",
+    "ses_2eefd5c49ffe5QJi42Xj1WZ87U",
+    "ses_2eefd5c44ffed7Z0lL8054940H",
+    "ses_2eee76f9effe2iLIRZlpk0lG22",
+    "ses_2eee76fa3ffeKaBKDoT5JeS518",
+    "ses_2eee76fa0ffe4epaO1HiUf4KaJ",
+    "ses_2eee76f9cffebS3oiwNjJpiSE4"
+  ],
+  "plan_name": "arwiz-init",
+  "agent": "atlas"
+}

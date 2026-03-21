@@ -1,8 +1,13 @@
-"""Default implementation of coverage tracing."""
+"""Default implementation of coverage tracing.
+
+Combines static AST analysis with runtime tracing via sys.settrace
+to measure branch coverage of Python scripts.
+"""
 
 from __future__ import annotations
 
 import contextlib
+import json
 import tempfile
 import time
 from pathlib import Path
@@ -12,28 +17,27 @@ from arwiz.coverage_tracer.interface import CoverageTracerProtocol
 from arwiz.foundation import BranchCoverage, BranchInfo
 from arwiz.process_manager import DefaultProcessManager
 
-_TRACE_WRAPPER_TEMPLATE = """\
+_TRACE_WRAPPER = """\
 import sys
 import json
 import runpy
 
-executed_lines = set()
+_executed = set()
 
-def tracer(frame, event, arg):
+def _tracer(frame, event, arg):
     if event == 'line':
-        executed_lines.add(frame.f_lineno)
-    return tracer
+        _executed.add(frame.f_lineno)
+    return _tracer
 
-sys.settrace(tracer)
+sys.settrace(_tracer)
 try:
     runpy.run_path({target_path!r}, run_name="__main__")
 except SystemExit:
     pass
 sys.settrace(None)
 
-# Output traced lines as JSON to stdout
-print("__TRACE_SEPARATOR__")
-print(json.dumps(sorted(executed_lines)))
+print("__ARWIZ_TRACE_SEP__")
+print(json.dumps(sorted(_executed)))
 """
 
 
@@ -53,7 +57,8 @@ class DefaultCoverageTracer(CoverageTracerProtocol):
         start = time.perf_counter()
 
         static_branches = get_static_branches(script_path)
-        wrapper_source = _TRACE_WRAPPER_TEMPLATE.format(target_path=str(script_path))
+        wrapper_source = _TRACE_WRAPPER.format(target_path=str(script_path))
+
         with tempfile.NamedTemporaryFile(
             mode="w",
             suffix=".py",
@@ -75,11 +80,9 @@ class DefaultCoverageTracer(CoverageTracerProtocol):
                 Path(wrapper_path).unlink(missing_ok=True)
 
         traced_lines: set[int] = set()
-        if result.exit_code == 0 and "__TRACE_SEPARATOR__" in result.stdout:
-            parts = result.stdout.split("__TRACE_SEPARATOR__")
+        if "__ARWIZ_TRACE_SEP__" in result.stdout:
+            parts = result.stdout.split("__ARWIZ_TRACE_SEP__")
             if len(parts) >= 2:
-                import json
-
                 with contextlib.suppress(json.JSONDecodeError, ValueError):
                     traced_lines = set(json.loads(parts[1].strip()))
 
@@ -87,31 +90,30 @@ class DefaultCoverageTracer(CoverageTracerProtocol):
         covered_count = 0
         uncovered_line_numbers: list[int] = []
 
-        for branch in static_branches:
-            is_taken = branch["line"] in traced_lines
-            if is_taken:
+        for line_num, branch_type in static_branches:
+            taken = line_num in traced_lines
+            if taken:
                 covered_count += 1
             else:
-                uncovered_line_numbers.append(branch["line"])
+                uncovered_line_numbers.append(line_num)
 
             branch_details.append(
                 BranchInfo(
-                    line_number=branch["line"],
-                    branch_type=branch["type"],
-                    condition=branch["condition"],
-                    taken=is_taken,
+                    line_number=line_num,
+                    branch_type=branch_type,
+                    condition="",
+                    taken=taken,
                 )
             )
 
         total = len(static_branches)
-        coverage_percent = (covered_count / total * 100) if total > 0 else 0.0
-
+        coverage_pct = (covered_count / total * 100) if total > 0 else 0.0
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         return BranchCoverage(
             total_branches=total,
             covered_branches=covered_count,
-            coverage_percent=round(coverage_percent, 2),
+            coverage_percent=round(coverage_pct, 2),
             uncovered_lines=uncovered_line_numbers,
             branch_details=branch_details,
             script_path=str(script_path),
@@ -122,4 +124,5 @@ class DefaultCoverageTracer(CoverageTracerProtocol):
         self,
         coverage: BranchCoverage,
     ) -> list[tuple[str, int]]:
-        return [(coverage.script_path, line) for line in coverage.uncovered_lines]
+        """Get uncovered branches as (branch_type, line_number) tuples."""
+        return [(bi.branch_type, bi.line_number) for bi in coverage.branch_details if not bi.taken]

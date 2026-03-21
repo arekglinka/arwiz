@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import functools
 import importlib
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 
@@ -10,7 +12,8 @@ from arwiz.hot_reload.interface import HotReloadProtocol
 
 
 class DefaultHotReloader(HotReloadProtocol):
-    _originals: dict[str, Callable] = {}
+    def __init__(self) -> None:
+        self._originals: dict[str, Callable] = {}
 
     def reload_function(
         self,
@@ -19,7 +22,7 @@ class DefaultHotReloader(HotReloadProtocol):
         new_source: str,
     ) -> bool:
         try:
-            compiled_code = compile(new_source, "<string>", "exec")
+            compiled_code = compile(new_source, "<arwiz-reload>", "exec")
         except SyntaxError:
             return False
 
@@ -35,35 +38,38 @@ class DefaultHotReloader(HotReloadProtocol):
 
         module_path = Path(module_path)
         module_name = module_path.stem
-        key = f"{module_name}.{function_name}"
-
-        if key not in self._originals:
-            try:
-                module = importlib.import_module(module_name)
-                original_func = getattr(module, function_name)
-                self._originals[key] = original_func
-            except (ImportError, AttributeError):
-                self._originals[key] = new_func
+        key = f"{module_name}:{function_name}"
 
         try:
             module = importlib.import_module(module_name)
-            setattr(module, function_name, new_func)
-            return True
         except ImportError:
             return False
+
+        if key not in self._originals:
+            try:
+                self._originals[key] = getattr(module, function_name)
+            except AttributeError:
+                return False
+
+        setattr(module, function_name, new_func)
+        return True
 
     def create_function_wrapper(
         self,
         original: Callable,
         optimized: Callable,
     ) -> Callable:
-        def wrapper(*args, **kwargs):
+        @functools.wraps(original)
+        def wrapper(*args: object, **kwargs: object) -> object:
             try:
                 return optimized(*args, **kwargs)
             except Exception:
+                warnings.warn(
+                    f"[arwiz] Optimized {original.__name__} failed, falling back to original",
+                    stacklevel=2,
+                )
                 return original(*args, **kwargs)
 
-        wrapper.__name__ = f"wrapped_{original.__name__}"
         return wrapper
 
     def rollback(
@@ -73,14 +79,11 @@ class DefaultHotReloader(HotReloadProtocol):
     ) -> None:
         module_path = Path(module_path)
         module_name = module_path.stem
-        key = f"{module_name}.{function_name}"
+        key = f"{module_name}:{function_name}"
 
         if key not in self._originals:
-            return
+            raise KeyError(f"No original stored for {key}")
 
-        original = self._originals[key]
-        try:
-            module = importlib.import_module(module_name)
-            setattr(module, function_name, original)
-        except ImportError:
-            pass
+        original = self._originals.pop(key)
+        module = importlib.import_module(module_name)
+        setattr(module, function_name, original)
