@@ -5,9 +5,9 @@ import tempfile
 import textwrap
 from pathlib import Path
 
-from arwiz.foundation import ProfileResult, ProfilingConfig
-from arwiz.process_manager import DefaultProcessManager
-from arwiz.profiler.parsers import parse_pstats
+from ..foundation import ArwizConfig, ProfileResult, ProfilingConfig
+from ..process_manager import DefaultProcessManager
+from .parsers import parse_pstats
 
 
 class DefaultProfiler:
@@ -18,9 +18,17 @@ class DefaultProfiler:
         self,
         script_path: Path | str,
         args: list[str] | None = None,
-        config: ProfilingConfig | None = None,
+        config: ProfilingConfig | ArwizConfig | None = None,
     ) -> ProfileResult:
-        cfg = config or ProfilingConfig()
+        if isinstance(config, ArwizConfig):
+            cfg = ProfilingConfig()
+            timeout_seconds = config.timeout_seconds
+            memory_limit_mb = config.memory_limit_mb
+        else:
+            cfg = config or ProfilingConfig()
+            timeout_seconds = 300
+            memory_limit_mb = None
+
         target_script = Path(script_path).resolve()
         cli_args = args or []
 
@@ -60,11 +68,15 @@ class DefaultProfiler:
                 self._process_manager.run_script(
                     script_path=wrapper_path,
                     args=run_args,
+                    timeout_seconds=timeout_seconds,
+                    memory_limit_mb=memory_limit_mb,
                 )
 
             process_result = self._process_manager.run_script(
                 script_path=wrapper_path,
                 args=run_args,
+                timeout_seconds=timeout_seconds,
+                memory_limit_mb=memory_limit_mb,
             )
 
             if process_result.exit_code != 0 or not stats_path.exists():
@@ -78,5 +90,4 @@ class DefaultProfiler:
             stats = pstats.Stats(str(stats_path))
             parsed = parse_pstats(stats, str(target_script))
             parsed.duration_ms = max(process_result.duration_ms, parsed.duration_ms)
-            parsed.raw_stats_path = str(stats_path)
             return parsed

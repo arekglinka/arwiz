@@ -4,7 +4,7 @@ import pstats
 from pathlib import Path
 from typing import cast
 
-from arwiz.foundation import CallNode, HotSpot, ProfileResult
+from ..foundation import CallNode, HotSpot, ProfileResult
 
 
 def _node_from_stat(
@@ -25,7 +25,10 @@ def _node_from_stat(
 
 def parse_pstats(stats: pstats.Stats, script_path: str) -> ProfileResult:
     stats.calc_callees()
-    stats_map = cast("dict[tuple[str, int, str], tuple[int, int, float, float, dict]]", stats.stats)
+    stats_map = cast(
+        "dict[tuple[str, int, str], tuple[int, int, float, float, dict]]",
+        getattr(stats, "stats", {}),
+    )
     total_tt = float(getattr(stats, "total_tt", 0.0))
 
     callers_by_callee: dict[tuple[str, int, str], set[tuple[str, int, str]]] = {
@@ -76,9 +79,33 @@ def parse_pstats(stats: pstats.Stats, script_path: str) -> ProfileResult:
         call_count=1,
     )
 
-    sorted_stats = sorted(stats_map.items(), key=lambda item: item[1][3], reverse=True)
+    sorted_stats = sorted(stats_map.items(), key=lambda item: item[1][2], reverse=True)
+
+    stdlib_private_prefixes = ("importlib", "pkgutil", "functools", "typing", "collections")
+
+    def _is_user_hotspot(func_key: tuple[str, int, str]) -> bool:
+        file_path, _, function_name = func_key
+        normalized = file_path.replace("\\", "/")
+
+        if file_path.startswith("<frozen"):
+            return False
+        if file_path.startswith("<"):
+            return False
+        if function_name == "<module>":
+            return False
+        if function_name == "run_path":
+            return False
+        if "/lib/python3." in normalized:
+            return False
+        return not (
+            function_name.startswith("_")
+            and any(f"/{prefix}" in normalized for prefix in stdlib_private_prefixes)
+        )
+
+    filtered_stats = [item for item in sorted_stats if _is_user_hotspot(item[0])]
+
     hotspots: list[HotSpot] = []
-    for func_key, stat in sorted_stats[:20]:
+    for func_key, stat in filtered_stats[:20]:
         file_path, line_number, function_name = func_key
         _, nc, tt, ct, _ = stat
         hotspots.append(

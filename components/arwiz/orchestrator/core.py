@@ -66,7 +66,7 @@ class DefaultOrchestrator:
             profile_result = self._run_step(
                 state,
                 "profile_script",
-                lambda: self._profiler.profile_script(script_path, args=[], config=None),
+                lambda: self._profiler.profile_script(script_path, args=[], config=cfg),
             )
             hotspots = self._run_step(
                 state,

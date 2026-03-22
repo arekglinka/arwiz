@@ -68,7 +68,13 @@ class TestDetectHotspots:
         names = [hs.function_name for hs in detected]
         assert "slow_func" in names
         assert "medium_func" in names
-        assert "tiny_func" not in names
+        assert "tiny_func" in names
+
+        # Higher threshold filters out functions with low self_time
+        strict = detector.detect_hotspots(profile_result, threshold_pct=80.0)
+        strict_names = [hs.function_name for hs in strict]
+        assert "slow_func" in strict_names
+        assert "tiny_func" not in strict_names
 
     def test_excludes_c_extensions(
         self, detector: DefaultHotspotDetector, profile_result: ProfileResult
