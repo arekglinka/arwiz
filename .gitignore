@@ -133,6 +133,7 @@ cython_debug/
 .perf_cache/
 .queue/
 .regime_pipeline/
+output/
 
 # Notebooks with output
 *.ipynb

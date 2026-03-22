@@ -5,11 +5,13 @@ AI-assisted Python profiler and optimizer. Profile scripts, detect hotspots, and
 ## Features
 
 - Profile Python scripts with `cProfile` subprocess isolation
-- Automatic hotspot detection ranked by self-time
+- Automatic hotspot detection ranked by self-time (filters out import noise)
 - Template-based optimizations (vectorize loops, Numba JIT, LRU cache, batch I/O)
-- LLM-powered optimization via OpenAI, Anthropic, or Ollama
-- Branch coverage tracing with uncovered-line reporting
-- Equivalence checking to validate optimized code correctness
+- LLM-powered optimization via OpenAI, Anthropic, or Ollama (graceful error handling)
+- Hot-reload optimized functions into running modules
+- Branch coverage tracing with uncovered-line reporting (including `match/case`)
+- Equivalence checking with relative + absolute tolerance and circular reference detection
+- Runtime decorator injection (sync and async functions)
 - Three interfaces: CLI, Streamlit UI, FastAPI
 
 ## Installation
@@ -117,9 +119,9 @@ arwiz looks for configuration in this order (later overrides earlier):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ARWIZ_TIMEOUT` | `30` | Script execution timeout in seconds |
-| `ARWIZ_MEMORY_LIMIT` | `auto` | Memory limit (bytes or `auto` for 50% of RAM) |
-| `ARWIZ_SPEEDUP_THRESHOLD` | `50` | Minimum speedup % to accept an optimization |
+| `ARWIZ_TIMEOUT` | `300` | Script execution timeout in seconds |
+| `ARWIZ_MEMORY_LIMIT` | `auto` | Memory limit in MB (`auto` = 50% of RAM) |
+| `ARWIZ_SPEEDUP_THRESHOLD` | `50` | Minimum speedup % to accept (0-100) |
 | `ARWIZ_LLM_PROVIDER` | `openai` | LLM provider: `openai`, `anthropic`, `ollama` |
 | `ARWIZ_LLM_MODEL` | `gpt-4o` | Model name for the selected provider |
 | `ARWIZ_LLM_API_KEY` | -- | API key for the LLM provider |
@@ -129,12 +131,9 @@ arwiz looks for configuration in this order (later overrides earlier):
 
 ```toml
 # .arwiz/config.toml
-[profiling]
-timeout = 60
-memory_limit = "auto"
-
-[optimization]
-speedup_threshold = 50
+timeout_seconds = 60
+memory_limit_mb = 4096
+speedup_threshold_percent = 25.0
 
 [llm]
 provider = "ollama"
@@ -204,14 +203,15 @@ $ uv run pytest --cov=arwiz --cov-report=term-missing
 | `test/integration/` | End-to-end pipeline tests |
 | `test/test_architecture.py` | AST-based architecture validation |
 
-322 tests across 24 test files.
+350 tests across 25 test files.
 
 ### Things to know
 
 - Profiler tests are slow (~30s) because they profile real scripts in a subprocess. Use `-m "not slow"` to skip them.
-- CLI smoke tests use real subprocess invocation of the `arwiz` CLI.
+- CLI integration tests (`test/integration/test_cli_workflow.py`) run the real CLI and are also marked `@pytest.mark.slow`.
 - FastAPI tests use `TestClient` with no server startup needed.
 - Streamlit tests verify imports only, not browser rendering.
+- LSP errors from pyrefly are false positives — it can't resolve Polylith namespace packages at static analysis time, but runtime imports work correctly.
 
 ## Entry Points
 
@@ -262,7 +262,7 @@ arwiz/
     cli/                   # Click-based CLI
     streamlit_ui/          # Streamlit dashboard
     api/                   # FastAPI REST API
-  test/                    # 322 tests
+  test/                    # 350 tests
     foundation/types/      # Model validation tests
     fixtures/              # Target scripts and fixtures
     components/            # Component unit tests
