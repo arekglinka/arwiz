@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import warnings
@@ -77,8 +78,14 @@ class DefaultInputManager:
         return InputSnapshot(**raw)
 
     def replay_input(self, snapshot: InputSnapshot, function: Callable) -> Any:
-        args = eval(snapshot.args_repr)  # noqa: S307
-        kwargs = eval(snapshot.kwargs_repr)  # noqa: S307
+        try:
+            args = ast.literal_eval(snapshot.args_repr)
+        except (ValueError, SyntaxError):
+            args = ()
+        try:
+            kwargs = ast.literal_eval(snapshot.kwargs_repr)
+        except (ValueError, SyntaxError):
+            kwargs = {}
         return function(*args, **kwargs)
 
     def list_inputs(self, base_path: Path | None = None) -> list[InputSnapshot]:

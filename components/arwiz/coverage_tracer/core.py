@@ -30,14 +30,15 @@ def _tracer(frame, event, arg):
     return _tracer
 
 sys.settrace(_tracer)
+sys.argv = [{target_path!r}] + sys.argv[1:]
 try:
     runpy.run_path({target_path!r}, run_name="__main__")
 except SystemExit:
     pass
 sys.settrace(None)
 
-print("__ARWIZ_TRACE_SEP__")
-print(json.dumps(sorted(_executed)))
+print("__ARWIZ_TRACE_SEP__", file=sys.stderr)
+print(json.dumps(sorted(_executed)), file=sys.stderr)
 """
 
 
@@ -80,8 +81,8 @@ class DefaultCoverageTracer(CoverageTracerProtocol):
                 Path(wrapper_path).unlink(missing_ok=True)
 
         traced_lines: set[int] = set()
-        if "__ARWIZ_TRACE_SEP__" in result.stdout:
-            parts = result.stdout.split("__ARWIZ_TRACE_SEP__")
+        if "__ARWIZ_TRACE_SEP__" in result.stderr:
+            parts = result.stderr.split("__ARWIZ_TRACE_SEP__")
             if len(parts) >= 2:
                 with contextlib.suppress(json.JSONDecodeError, ValueError):
                     traced_lines = set(json.loads(parts[1].strip()))

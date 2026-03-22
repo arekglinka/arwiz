@@ -122,6 +122,18 @@ class TestDeepEqual:
 
         assert not deep_equal(CustomType(), 42)[0]
 
+    def test_circular_reference(self) -> None:
+        a: list = []
+        a.append(a)
+        result, reason = deep_equal(a, a, tolerance=0.0)
+        assert result is True
+
+    def test_circular_reference_dict(self) -> None:
+        a: dict = {}
+        a["self"] = a
+        result, reason = deep_equal(a, a, tolerance=0.0)
+        assert result is True
+
     def test_nested_lists_with_floats(self) -> None:
         a = [[1.0, 2.0], [3.0, 4.0]]
         b = [[1.0 + 1e-9, 2.0], [3.0, 4.0 + 1e-9]]

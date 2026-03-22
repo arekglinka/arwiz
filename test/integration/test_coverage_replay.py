@@ -21,11 +21,11 @@ SIMPLE_LOOP_PATH = "test/fixtures/targets/simple_loop.py"
 
 def _make_process_result(traced_lines: list[int]) -> ProcessResult:
     """Build a fake ProcessResult with traced line output."""
-    stdout = f"some stdout\n__ARWIZ_TRACE_SEP__\n{json.dumps(sorted(traced_lines))}\n"
+    stderr = f"__ARWIZ_TRACE_SEP__\n{json.dumps(sorted(traced_lines))}\n"
     return ProcessResult(
         exit_code=0,
-        stdout=stdout,
-        stderr="",
+        stdout="",
+        stderr=stderr,
         duration_ms=10.0,
     )
 

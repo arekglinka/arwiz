@@ -55,6 +55,10 @@ def arrays_close(a: Any, b: Any, tolerance: float = 1e-6) -> tuple[bool, str]:
 
 
 def deep_equal(a: Any, b: Any, tolerance: float = 1e-6) -> tuple[bool, str]:
+    return _deep_equal(a, b, tolerance, set())
+
+
+def _deep_equal(a: Any, b: Any, tolerance: float, visited: set[int]) -> tuple[bool, str]:
     if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
         return arrays_close(a, b, tolerance)
 
@@ -74,36 +78,68 @@ def deep_equal(a: Any, b: Any, tolerance: float = 1e-6) -> tuple[bool, str]:
         return False, f"None vs non-None: {a!r} vs {b!r}"
 
     if isinstance(a, dict) and isinstance(b, dict):
-        if set(a.keys()) != set(b.keys()):
-            return False, f"Dict keys differ: {set(a.keys())} vs {set(b.keys())}"
-        for k in a:
-            eq, reason = deep_equal(a[k], b[k], tolerance)
-            if not eq:
-                return False, f"Dict key '{k}': {reason}"
-        return True, "Dicts are equivalent"
+        if id(a) in visited or id(b) in visited:
+            return True, "circular reference detected (assumed equivalent)"
+        visited.add(id(a))
+        visited.add(id(b))
+        try:
+            if set(a.keys()) != set(b.keys()):
+                return False, (f"Dict keys differ: {set(a.keys())} vs {set(b.keys())}")
+            for k in a:
+                eq, reason = _deep_equal(a[k], b[k], tolerance, visited)
+                if not eq:
+                    return False, f"Dict key '{k}': {reason}"
+            return True, "Dicts are equivalent"
+        finally:
+            visited.discard(id(a))
+            visited.discard(id(b))
 
     if isinstance(a, list) and isinstance(b, list):
-        if len(a) != len(b):
-            return False, f"List length mismatch: {len(a)} vs {len(b)}"
-        for i, (ea, eb) in enumerate(zip(a, b, strict=False)):
-            eq, reason = deep_equal(ea, eb, tolerance)
-            if not eq:
-                return False, f"List index {i}: {reason}"
-        return True, "Lists are equivalent"
+        if id(a) in visited or id(b) in visited:
+            return True, "circular reference detected (assumed equivalent)"
+        visited.add(id(a))
+        visited.add(id(b))
+        try:
+            if len(a) != len(b):
+                return False, f"List length mismatch: {len(a)} vs {len(b)}"
+            for i, (ea, eb) in enumerate(zip(a, b, strict=False)):
+                eq, reason = _deep_equal(ea, eb, tolerance, visited)
+                if not eq:
+                    return False, f"List index {i}: {reason}"
+            return True, "Lists are equivalent"
+        finally:
+            visited.discard(id(a))
+            visited.discard(id(b))
 
     if isinstance(a, tuple) and isinstance(b, tuple):
-        if len(a) != len(b):
-            return False, f"Tuple length mismatch: {len(a)} vs {len(b)}"
-        for i, (ea, eb) in enumerate(zip(a, b, strict=False)):
-            eq, reason = deep_equal(ea, eb, tolerance)
-            if not eq:
-                return False, f"Tuple index {i}: {reason}"
-        return True, "Tuples are equivalent"
+        if id(a) in visited or id(b) in visited:
+            return True, "circular reference detected (assumed equivalent)"
+        visited.add(id(a))
+        visited.add(id(b))
+        try:
+            if len(a) != len(b):
+                return False, f"Tuple length mismatch: {len(a)} vs {len(b)}"
+            for i, (ea, eb) in enumerate(zip(a, b, strict=False)):
+                eq, reason = _deep_equal(ea, eb, tolerance, visited)
+                if not eq:
+                    return False, f"Tuple index {i}: {reason}"
+            return True, "Tuples are equivalent"
+        finally:
+            visited.discard(id(a))
+            visited.discard(id(b))
 
     if isinstance(a, set) and isinstance(b, set):
-        if a == b:
-            return True, "Sets are equal"
-        return False, f"Sets differ: {a} vs {b}"
+        if id(a) in visited or id(b) in visited:
+            return True, "circular reference detected (assumed equivalent)"
+        visited.add(id(a))
+        visited.add(id(b))
+        try:
+            if a == b:
+                return True, "Sets are equal"
+            return False, f"Sets differ: {a} vs {b}"
+        finally:
+            visited.discard(id(a))
+            visited.discard(id(b))
 
     if type(a) is type(b) and a == b:
         return True, f"Values equal: {a!r}"

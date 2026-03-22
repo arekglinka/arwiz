@@ -75,6 +75,25 @@ class TestReplayInput:
         result = manager.replay_input(snapshot, multiply)
         assert result == 20
 
+    def test_replay_safe_deserialization(self, manager: DefaultInputManager) -> None:
+        """Malicious args_repr should not execute code; fallback to empty."""
+        called_args: tuple = ()
+        called_kwargs: dict = {}
+
+        def spy(*args: object, **kwargs: object) -> None:
+            nonlocal called_args, called_kwargs
+            called_args = args
+            called_kwargs = kwargs
+
+        snap = manager.capture_input("spy", (1, 2), {})
+        # Override with malicious repr that would be dangerous under eval()
+        snap.args_repr = "__import__('os').system('ls')"
+        snap.kwargs_repr = "{'x': __import__('os').system('echo hack')}"
+        manager.replay_input(snap, spy)
+        # ast.literal_eval rejects non-literals → fallback to () and {}
+        assert called_args == ()
+        assert called_kwargs == {}
+
 
 class TestListInputs:
     def test_list_empty(self, manager: DefaultInputManager, tmp_path: Path) -> None:
