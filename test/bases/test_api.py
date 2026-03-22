@@ -1,9 +1,9 @@
 import importlib.util
 import re
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from arwiz.foundation import OptimizationAttempt, OptimizationResult
 
 fastapi_available = importlib.util.find_spec("fastapi") is not None
 pytestmark = pytest.mark.skipif(not fastapi_available, reason="fastapi not installed")
@@ -108,15 +108,27 @@ def test_profile_with_args(mock_profiler_cls, client):
     )
 
 
-@patch("arwiz.api.routes.optimize.DefaultTemplateOptimizer")
-@patch.object(Path, "read_text")
-def test_optimize_auto_strategy(mock_read_text, mock_optimizer_cls, client):
-    fake_source = "def foo():\n    return [x**2 for x in range(10)]\n"
-    mock_read_text.return_value = fake_source
-
-    mock_optimizer_cls.return_value.apply_template.return_value = (
-        "@jit(nopython=True)\ndef foo():\n    return [x**2 for x in range(10)]\n"
+@patch("arwiz.api.routes.optimize.DefaultOrchestrator")
+def test_optimize_auto_strategy(mock_orch_cls, client):
+    attempt = OptimizationAttempt(
+        attempt_id="opt_123",
+        original_code="def foo():\n    return [x**2 for x in range(10)]\n",
+        optimized_code="@jit(nopython=True)\ndef foo():\n    return [x**2 for x in range(10)]\n",
+        strategy="template",
+        template_name="numba_jit",
+        syntax_valid=True,
+        passed_equivalence=True,
     )
+    mock_orch = MagicMock()
+    mock_orch.run_profile_optimize_pipeline.return_value = OptimizationResult(
+        function_name="foo",
+        file_path="test.py",
+        attempts=[attempt],
+        best_attempt=attempt,
+        applied=True,
+        total_time_saved_ms=0.0,
+    )
+    mock_orch_cls.return_value = mock_orch
 
     resp = client.post(
         "/optimize",
@@ -128,9 +140,9 @@ def test_optimize_auto_strategy(mock_read_text, mock_optimizer_cls, client):
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["strategy"] == "numba_jit"
-    assert data["syntax_valid"] is True
-    assert "jit" in data["optimized_code"]
+    assert data["function_name"] == "foo"
+    assert data["best_attempt"]["syntax_valid"] is True
+    assert "jit" in data["best_attempt"]["optimized_code"]
 
 
 @patch("arwiz.api.routes.coverage.DefaultCoverageTracer")
@@ -197,12 +209,9 @@ class TestErrorHandling:
 
     def test_optimize_invalid_strategy(self, client_no_raise):
         """POST /optimize with unknown strategy → 500."""
-        with (
-            patch.object(Path, "read_text", return_value="def foo(): pass"),
-            patch("arwiz.api.routes.optimize.DefaultTemplateOptimizer") as mock_opt,
-        ):
-            mock_opt.return_value.apply_template.side_effect = ValueError(
-                "Unknown template: bad_strategy"
+        with patch("arwiz.api.routes.optimize.DefaultOrchestrator") as mock_orch_cls:
+            mock_orch_cls.return_value.run_profile_optimize_pipeline.side_effect = ValueError(
+                "Unknown strategy: bad_strategy"
             )
             resp = client_no_raise.post(
                 "/optimize",

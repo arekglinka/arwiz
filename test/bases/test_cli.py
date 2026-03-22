@@ -9,6 +9,7 @@ from arwiz.foundation import (
     BranchInfo,
     HotSpot,
     OptimizationAttempt,
+    OptimizationResult,
     ProfileResult,
 )
 from click.testing import CliRunner
@@ -152,31 +153,23 @@ class TestProfileCommand:
 
 
 class TestOptimizeCommand:
-    @patch("arwiz.cli.commands.optimize_cmd.DefaultTemplateOptimizer")
-    @patch("arwiz.cli.commands.optimize_cmd.DefaultHotspotDetector")
-    @patch("arwiz.cli.commands.optimize_cmd.DefaultProfiler")
+    @patch("arwiz.cli.commands.optimize_cmd.DefaultOrchestrator")
     def test_optimize_template_strategy(
         self,
-        mock_profiler_cls,
-        mock_hotspot_cls,
-        mock_tmpl_cls,
+        mock_orch_cls,
         runner,
-        fake_profile_result,
-        fake_hotspots,
         fake_optimization,
     ):
-        mock_profiler = MagicMock()
-        mock_profiler.profile_script.return_value = fake_profile_result
-        mock_profiler_cls.return_value = mock_profiler
-
-        mock_hotspot = MagicMock()
-        mock_hotspot.detect_hotspots.return_value = fake_hotspots
-        mock_hotspot_cls.return_value = mock_hotspot
-
-        mock_tmpl = MagicMock()
-        mock_tmpl.detect_applicable_templates.return_value = ["numpy_vectorize"]
-        mock_tmpl.apply_template.return_value = fake_optimization.optimized_code
-        mock_tmpl_cls.return_value = mock_tmpl
+        mock_orch = MagicMock()
+        mock_orch.run_profile_optimize_pipeline.return_value = OptimizationResult(
+            function_name="compute_sum",
+            file_path=SIMPLE_LOOP,
+            attempts=[fake_optimization],
+            best_attempt=fake_optimization,
+            applied=True,
+            total_time_saved_ms=0.0,
+        )
+        mock_orch_cls.return_value = mock_orch
 
         result = runner.invoke(
             cli, ["optimize", SIMPLE_LOOP, "--function", "compute_sum", "--strategy", "template"]
@@ -185,36 +178,23 @@ class TestOptimizeCommand:
         assert result.exit_code == 0
         assert "numpy_vectorize" in result.output
 
-    @patch("arwiz.cli.commands.optimize_cmd.DefaultLLMOptimizer")
-    @patch("arwiz.cli.commands.optimize_cmd.DefaultTemplateOptimizer")
-    @patch("arwiz.cli.commands.optimize_cmd.DefaultHotspotDetector")
-    @patch("arwiz.cli.commands.optimize_cmd.DefaultProfiler")
+    @patch("arwiz.cli.commands.optimize_cmd.DefaultOrchestrator")
     def test_optimize_auto_strategy(
         self,
-        mock_profiler_cls,
-        mock_hotspot_cls,
-        mock_tmpl_cls,
-        mock_llm_cls,
+        mock_orch_cls,
         runner,
-        fake_profile_result,
-        fake_hotspots,
         fake_optimization,
     ):
-        mock_profiler = MagicMock()
-        mock_profiler.profile_script.return_value = fake_profile_result
-        mock_profiler_cls.return_value = mock_profiler
-
-        mock_hotspot = MagicMock()
-        mock_hotspot.detect_hotspots.return_value = fake_hotspots
-        mock_hotspot_cls.return_value = mock_hotspot
-
-        mock_tmpl = MagicMock()
-        mock_tmpl.detect_applicable_templates.return_value = []
-        mock_tmpl_cls.return_value = mock_tmpl
-
-        mock_llm = MagicMock()
-        mock_llm.optimize_function.return_value = fake_optimization
-        mock_llm_cls.return_value = mock_llm
+        mock_orch = MagicMock()
+        mock_orch.run_profile_optimize_pipeline.return_value = OptimizationResult(
+            function_name="compute_sum",
+            file_path=SIMPLE_LOOP,
+            attempts=[fake_optimization],
+            best_attempt=fake_optimization,
+            applied=True,
+            total_time_saved_ms=0.0,
+        )
+        mock_orch_cls.return_value = mock_orch
 
         result = runner.invoke(
             cli, ["optimize", SIMPLE_LOOP, "--function", "compute_sum", "--strategy", "auto"]
@@ -222,18 +202,26 @@ class TestOptimizeCommand:
 
         assert result.exit_code == 0
 
-    @patch("arwiz.cli.commands.optimize_cmd.DefaultHotspotDetector")
-    @patch("arwiz.cli.commands.optimize_cmd.DefaultProfiler")
-    def test_optimize_function_not_found(
-        self, mock_profiler_cls, mock_hotspot_cls, runner, fake_profile_result
-    ):
-        mock_profiler = MagicMock()
-        mock_profiler.profile_script.return_value = fake_profile_result
-        mock_profiler_cls.return_value = mock_profiler
-
-        mock_hotspot = MagicMock()
-        mock_hotspot.detect_hotspots.return_value = []
-        mock_hotspot_cls.return_value = mock_hotspot
+    @patch("arwiz.cli.commands.optimize_cmd.DefaultOrchestrator")
+    def test_optimize_function_not_found(self, mock_orch_cls, runner):
+        mock_orch = MagicMock()
+        mock_orch.run_profile_optimize_pipeline.return_value = OptimizationResult(
+            function_name="nonexistent",
+            file_path=SIMPLE_LOOP,
+            attempts=[
+                OptimizationAttempt(
+                    attempt_id="opt_err",
+                    original_code="",
+                    optimized_code="",
+                    strategy="auto",
+                    error_message="Function 'nonexistent' not found in detected hotspots",
+                )
+            ],
+            best_attempt=None,
+            applied=False,
+            total_time_saved_ms=0.0,
+        )
+        mock_orch_cls.return_value = mock_orch
 
         result = runner.invoke(cli, ["optimize", SIMPLE_LOOP, "--function", "nonexistent"])
 

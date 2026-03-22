@@ -21,10 +21,25 @@ class OptimizeRequest(BaseModel):
 
 
 class OptimizeResponse(BaseModel):
-    original_code: str
-    optimized_code: str
-    strategy: str
-    syntax_valid: bool
+    class OptimizationAttemptResponse(BaseModel):
+        attempt_id: str
+        original_code: str
+        optimized_code: str
+        strategy: str
+        llm_model: str | None = None
+        template_name: str | None = None
+        syntax_valid: bool
+        passed_equivalence: bool
+        speedup_percent: float
+        error_message: str | None = None
+        timestamp: str
+
+    function_name: str
+    file_path: str
+    attempts: list[OptimizationAttemptResponse] = Field(default_factory=list)
+    best_attempt: OptimizationAttemptResponse | None = None
+    applied: bool
+    total_time_saved_ms: float
 
 
 class CoverageRequest(BaseModel):

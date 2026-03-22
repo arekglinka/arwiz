@@ -5,11 +5,13 @@ from pathlib import Path
 import psutil
 from arwiz.foundation import ArwizConfig
 
-_ENV_MEMORY = "ARWIZ_MEMORY_LIMIT_MB"
-_ENV_TIMEOUT = "ARWIZ_TIMEOUT_SECONDS"
+_ENV_MEMORY = "ARWIZ_MEMORY_LIMIT"
+_ENV_TIMEOUT = "ARWIZ_TIMEOUT"
 _ENV_SPEEDUP = "ARWIZ_SPEEDUP_THRESHOLD"
 _ENV_LLM_PROVIDER = "ARWIZ_LLM_PROVIDER"
 _ENV_LLM_MODEL = "ARWIZ_LLM_MODEL"
+_ENV_LLM_API_KEY = "ARWIZ_LLM_API_KEY"
+_ENV_LLM_BASE_URL = "ARWIZ_LLM_BASE_URL"
 
 
 class DefaultConfigLoader:
@@ -51,6 +53,10 @@ class DefaultConfigLoader:
             llm_dict["provider"] = os.environ[_ENV_LLM_PROVIDER]
         if _ENV_LLM_MODEL in os.environ:
             llm_dict["model"] = os.environ[_ENV_LLM_MODEL]
+        if _ENV_LLM_API_KEY in os.environ:
+            llm_dict["api_key"] = os.environ[_ENV_LLM_API_KEY]
+        if _ENV_LLM_BASE_URL in os.environ:
+            llm_dict["base_url"] = os.environ[_ENV_LLM_BASE_URL]
 
         merged["llm_config"] = llm_dict
 

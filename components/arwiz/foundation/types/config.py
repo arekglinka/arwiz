@@ -21,6 +21,7 @@ class LLMConfig(BaseModel):
     provider: str = "openai"
     model: str = "gpt-4o"
     api_key_env_var: str = "OPENAI_API_KEY"
+    api_key: str | None = None
     base_url: str | None = None
     max_tokens: int = 4096
     temperature: float = 0.2
