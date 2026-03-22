@@ -112,9 +112,9 @@ class TestEnvVarOverrides:
     """Test environment variable overrides."""
 
     def test_env_var_timeout(self, loader: DefaultConfigLoader) -> None:
-        """ARWIZ_TIMEOUT_SECONDS env var should override config."""
+        """ARWIZ_TIMEOUT env var should override config."""
         with (
-            patch.dict(os.environ, {"ARWIZ_TIMEOUT_SECONDS": "60"}, clear=False),
+            patch.dict(os.environ, {"ARWIZ_TIMEOUT": "60"}, clear=False),
             patch("arwiz.config.core.psutil") as mock_psutil,
         ):
             mock_psutil.virtual_memory.return_value.total = 16 * 1024**3
@@ -122,9 +122,9 @@ class TestEnvVarOverrides:
         assert config.timeout_seconds == 60
 
     def test_env_var_memory_limit(self, loader: DefaultConfigLoader) -> None:
-        """ARWIZ_MEMORY_LIMIT_MB should override auto-detected value."""
+        """ARWIZ_MEMORY_LIMIT should override auto-detected value."""
         with (
-            patch.dict(os.environ, {"ARWIZ_MEMORY_LIMIT_MB": "4096"}, clear=False),
+            patch.dict(os.environ, {"ARWIZ_MEMORY_LIMIT": "4096"}, clear=False),
             patch("arwiz.config.core.psutil") as mock_psutil,
         ):
             mock_psutil.virtual_memory.return_value.total = 16 * 1024**3
@@ -144,7 +144,7 @@ class TestEnvVarOverrides:
     def test_env_overrides_file(self, loader: DefaultConfigLoader, temp_toml: Path) -> None:
         """Env vars should override TOML file values."""
         with (
-            patch.dict(os.environ, {"ARWIZ_TIMEOUT_SECONDS": "999"}, clear=False),
+            patch.dict(os.environ, {"ARWIZ_TIMEOUT": "999"}, clear=False),
             patch("arwiz.config.core.psutil") as mock_psutil,
         ):
             mock_psutil.virtual_memory.return_value.total = 16 * 1024**3
@@ -158,7 +158,7 @@ class TestConfigValidation:
     def test_negative_memory_raises(self, loader: DefaultConfigLoader) -> None:
         """memory_limit_mb <= 0 should raise ValueError."""
         with (
-            patch.dict(os.environ, {"ARWIZ_MEMORY_LIMIT_MB": "-1"}, clear=False),
+            patch.dict(os.environ, {"ARWIZ_MEMORY_LIMIT": "-1"}, clear=False),
             patch("arwiz.config.core.psutil") as mock_psutil,
             pytest.raises(ValueError, match="memory_limit_mb"),
         ):
@@ -168,7 +168,7 @@ class TestConfigValidation:
     def test_zero_timeout_raises(self, loader: DefaultConfigLoader) -> None:
         """timeout_seconds <= 0 should raise ValueError."""
         with (
-            patch.dict(os.environ, {"ARWIZ_TIMEOUT_SECONDS": "0"}, clear=False),
+            patch.dict(os.environ, {"ARWIZ_TIMEOUT": "0"}, clear=False),
             patch("arwiz.config.core.psutil") as mock_psutil,
             pytest.raises(ValueError, match="timeout_seconds"),
         ):
@@ -178,7 +178,7 @@ class TestConfigValidation:
     def test_negative_timeout_raises(self, loader: DefaultConfigLoader) -> None:
         """Negative timeout_seconds should raise ValueError."""
         with (
-            patch.dict(os.environ, {"ARWIZ_TIMEOUT_SECONDS": "-10"}, clear=False),
+            patch.dict(os.environ, {"ARWIZ_TIMEOUT": "-10"}, clear=False),
             patch("arwiz.config.core.psutil") as mock_psutil,
             pytest.raises(ValueError, match="timeout_seconds"),
         ):
@@ -208,3 +208,27 @@ class TestLlmEnvOverrides:
             mock_psutil.virtual_memory.return_value.total = 16 * 1024**3
             config = loader.load_config()
         assert config.llm_config.model == "claude-3-opus"
+
+    def test_llm_api_key_env(self, loader: DefaultConfigLoader) -> None:
+        """ARWIZ_LLM_API_KEY should be stored on the config."""
+        with (
+            patch.dict(os.environ, {"ARWIZ_LLM_API_KEY": "sk-test-123"}, clear=False),
+            patch("arwiz.config.core.psutil") as mock_psutil,
+        ):
+            mock_psutil.virtual_memory.return_value.total = 16 * 1024**3
+            config = loader.load_config()
+        assert config.llm_config.api_key == "sk-test-123"
+
+    def test_llm_base_url_env(self, loader: DefaultConfigLoader) -> None:
+        """ARWIZ_LLM_BASE_URL should be stored on the config."""
+        with (
+            patch.dict(
+                os.environ,
+                {"ARWIZ_LLM_BASE_URL": "http://localhost:11434/v1"},
+                clear=False,
+            ),
+            patch("arwiz.config.core.psutil") as mock_psutil,
+        ):
+            mock_psutil.virtual_memory.return_value.total = 16 * 1024**3
+            config = loader.load_config()
+        assert config.llm_config.base_url == "http://localhost:11434/v1"

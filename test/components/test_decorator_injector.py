@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -75,6 +76,43 @@ class TestInjectDecorators:
         finally:
             injector.remove_injected(tmp_path)
         assert simple_loop_path.read_text(encoding="utf-8") == original
+
+    def test_no_duplicate_decorator_on_reinject(self, injector: DefaultDecoratorInjector) -> None:
+        source = "def foo(): pass"
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(source)
+            f.flush()
+            path = Path(f.name)
+        try:
+            tmp1 = injector.inject_decorators(path, decorator_name="deco")
+            tmp2 = injector.inject_decorators(tmp1, decorator_name="deco")
+            tree = ast.parse(tmp2.read_text(encoding="utf-8"))
+            func = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef))
+            count = sum(
+                1 for d in func.decorator_list if isinstance(d, ast.Name) and d.id == "deco"
+            )
+            assert count == 1
+        finally:
+            injector.remove_injected(tmp2)
+            injector.remove_injected(tmp1)
+            path.unlink(missing_ok=True)
+
+    def test_async_function_gets_decorator(self, injector: DefaultDecoratorInjector) -> None:
+        source = "async def bar(): pass"
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(source)
+            f.flush()
+            path = Path(f.name)
+        try:
+            tmp = injector.inject_decorators(path, decorator_name="my_deco")
+            tree = ast.parse(tmp.read_text(encoding="utf-8"))
+            async_func = next(n for n in ast.walk(tree) if isinstance(n, ast.AsyncFunctionDef))
+            assert any(
+                isinstance(d, ast.Name) and d.id == "my_deco" for d in async_func.decorator_list
+            )
+        finally:
+            injector.remove_injected(tmp)
+            path.unlink(missing_ok=True)
 
 
 class TestTempFile:

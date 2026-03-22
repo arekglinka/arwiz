@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import functools
 import os
 import tempfile
 from collections.abc import Callable
@@ -17,6 +18,26 @@ class _DecoratorInjector(ast.NodeTransformer):
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
         self.generic_visit(node)
+        already_has = any(
+            d
+            for d in node.decorator_list
+            if isinstance(d, ast.Name) and d.id == self.decorator_name
+        )
+        if already_has:
+            return node
+        decorator = ast.Name(id=self.decorator_name, ctx=ast.Load())
+        node.decorator_list.insert(0, decorator)
+        return node
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
+        self.generic_visit(node)
+        already_has = any(
+            d
+            for d in node.decorator_list
+            if isinstance(d, ast.Name) and d.id == self.decorator_name
+        )
+        if already_has:
+            return node
         decorator = ast.Name(id=self.decorator_name, ctx=ast.Load())
         node.decorator_list.insert(0, decorator)
         return node
@@ -42,6 +63,7 @@ class DefaultDecoratorInjector(DecoratorInjectorProtocol):
 
     def create_input_override_decorator(self, input_data: dict) -> Callable:
         def decorator(func: Callable) -> Callable:
+            @functools.wraps(func)
             def wrapper(*args, **kwargs):
                 if "args" in input_data and "kwargs" in input_data:
                     return func(*input_data["args"], **input_data["kwargs"])
@@ -51,8 +73,6 @@ class DefaultDecoratorInjector(DecoratorInjectorProtocol):
                     return func(**input_data["kwargs"])
                 return func(*args, **kwargs)
 
-            wrapper.__name__ = func.__name__
-            wrapper.__qualname__ = func.__qualname__
             return wrapper
 
         return decorator

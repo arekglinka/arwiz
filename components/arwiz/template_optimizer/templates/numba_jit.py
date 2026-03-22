@@ -1,19 +1,32 @@
 import ast
 
 
+def _is_numba_jit_decorator(decorator: ast.expr) -> bool:
+    if isinstance(decorator, ast.Attribute) and isinstance(decorator.value, ast.Name):
+        return decorator.value.id == "numba" and decorator.attr in {"njit", "jit"}
+
+    if isinstance(decorator, ast.Name):
+        return decorator.id in {"njit", "jit"}
+
+    if isinstance(decorator, ast.Call):
+        return _is_numba_jit_decorator(decorator.func)
+
+    deco_text = ast.unparse(decorator)
+    return (
+        "numba" in deco_text
+        or "njit" in deco_text
+        or deco_text == "jit"
+        or deco_text.endswith(".jit")
+    )
+
+
 class _NumbaJITAdder(ast.NodeTransformer):
     def __init__(self) -> None:
         self.modified = False
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
         self.generic_visit(node)
-        has_decorator = any(
-            isinstance(deco, ast.Attribute)
-            and isinstance(deco.value, ast.Name)
-            and deco.value.id == "numba"
-            and deco.attr == "njit"
-            for deco in node.decorator_list
-        )
+        has_decorator = any(_is_numba_jit_decorator(deco) for deco in node.decorator_list)
         if not has_decorator:
             self.modified = True
             node.decorator_list.insert(

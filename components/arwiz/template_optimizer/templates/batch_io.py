@@ -1,6 +1,13 @@
 import ast
 
 
+def _contains_newline(expr: ast.AST) -> bool:
+    for node in ast.walk(expr):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and "\n" in node.value:
+            return True
+    return False
+
+
 class _BatchIOTransformer(ast.NodeTransformer):
     def visit_With(self, node: ast.With) -> ast.AST:
         self.generic_visit(node)
@@ -18,6 +25,8 @@ class _BatchIOTransformer(ast.NodeTransformer):
         file_ref = call_expr.func.value
         if not isinstance(file_ref, ast.Name):
             return node
+
+        join_separator = "\n" if _contains_newline(call_expr.args[0]) else ""
 
         buffer_name = "_arwiz_buffer"
         init_buffer = ast.Assign(
@@ -41,7 +50,9 @@ class _BatchIOTransformer(ast.NodeTransformer):
                 args=[
                     ast.Call(
                         func=ast.Attribute(
-                            value=ast.Constant(value=""), attr="join", ctx=ast.Load()
+                            value=ast.Constant(value=join_separator),
+                            attr="join",
+                            ctx=ast.Load(),
                         ),
                         args=[ast.Name(id=buffer_name, ctx=ast.Load())],
                         keywords=[],

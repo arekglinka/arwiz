@@ -1,20 +1,26 @@
 import ast
 
 
+def _is_lru_cache_decorator(decorator: ast.expr) -> bool:
+    if isinstance(decorator, ast.Name):
+        return decorator.id == "lru_cache"
+
+    if isinstance(decorator, ast.Attribute):
+        return decorator.attr == "lru_cache"
+
+    if isinstance(decorator, ast.Call):
+        return _is_lru_cache_decorator(decorator.func)
+
+    return "lru_cache" in ast.unparse(decorator)
+
+
 class _CachingAdder(ast.NodeTransformer):
     def __init__(self) -> None:
         self.modified = False
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
         self.generic_visit(node)
-        has_cache = any(
-            isinstance(deco, ast.Call)
-            and isinstance(deco.func, ast.Attribute)
-            and isinstance(deco.func.value, ast.Name)
-            and deco.func.value.id == "functools"
-            and deco.func.attr == "lru_cache"
-            for deco in node.decorator_list
-        )
+        has_cache = any(_is_lru_cache_decorator(deco) for deco in node.decorator_list)
         if not has_cache:
             self.modified = True
             node.decorator_list.insert(
