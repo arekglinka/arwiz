@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 
 
-def generate_data(n: int = 50_000) -> pd.DataFrame:
+def generate_data(n: int = 10_000) -> pd.DataFrame:
     rng = np.random.default_rng(42)
     regions = ["North", "South", "East", "West"]
     categories = ["Electronics", "Clothing", "Food", "Books"]
@@ -79,8 +79,8 @@ def write_region_reports(df: pd.DataFrame, out_dir: str = "output") -> None:
 
 
 def main() -> None:
-    print("Generating 50k rows of sales data...")
-    df = generate_data(50_000)
+    print("Generating 10k rows of sales data...")
+    df = generate_data(10_000)
     print(f"Raw shape: {df.shape}")
 
     start = time.perf_counter()

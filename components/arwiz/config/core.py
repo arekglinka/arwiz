@@ -71,5 +71,10 @@ class DefaultConfigLoader:
             raise ValueError("memory_limit_mb must be > 0")
         if merged["timeout_seconds"] <= 0:
             raise ValueError("timeout_seconds must be > 0")
+        if (
+            merged["speedup_threshold_percent"] is not None
+            and not 0 <= merged["speedup_threshold_percent"] <= 100
+        ):
+            raise ValueError("speedup_threshold_percent must be between 0 and 100")
 
         return ArwizConfig(**merged)

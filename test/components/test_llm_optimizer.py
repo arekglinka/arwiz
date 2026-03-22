@@ -126,6 +126,20 @@ class TimeoutMockProvider:
         raise httpx.TimeoutException("request timed out")
 
 
+class HTTPErrorMockProvider:
+    def generate(self, _prompt: str, _model: str, **kwargs: object) -> str:  # noqa: ARG002
+        raise httpx.HTTPStatusError(
+            "429 Too Many Requests",
+            request=httpx.Request("POST", "http://fake"),
+            response=httpx.Response(429),
+        )
+
+
+class GenericErrorMockProvider:
+    def generate(self, _prompt: str, _model: str, **kwargs: object) -> str:  # noqa: ARG002
+        raise RuntimeError("connection refused")
+
+
 class NoCodeBlockProvider:
     def generate(self, _prompt: str, _model: str, **kwargs: object) -> str:  # noqa: ARG002
         return "I cannot optimize this code. Sorry."
@@ -162,19 +176,62 @@ class TestProviderErrors:
         assert attempt.syntax_valid is True
         assert attempt.strategy == "llm_generated"
 
-    def test_provider_timeout_propagates(self, hotspot: HotSpot) -> None:
+    def test_provider_timeout_returns_graceful_error(self, hotspot: HotSpot) -> None:
         optimizer = DefaultLLMOptimizer()
         optimizer.provider = TimeoutMockProvider()
         source = "def compute_sum(data):\n    return sum(data)"
 
-        with pytest.raises(httpx.TimeoutException, match="request timed out"):
-            optimizer.optimize_function(
-                source,
-                hotspot,
-                config=LLMConfig(
-                    provider="openai", model="gpt-4o", api_key_env_var="OPENAI_API_KEY"
-                ),
-            )
+        attempt = optimizer.optimize_function(
+            source,
+            hotspot,
+            config=LLMConfig(provider="openai", model="gpt-4o", api_key_env_var="OPENAI_API_KEY"),
+        )
+
+        assert attempt.optimized_code == source
+        assert attempt.syntax_valid is False
+        assert attempt.error_message is not None
+        assert (
+            "timeout" in attempt.error_message.lower()
+            or "timed out" in attempt.error_message.lower()
+        )
+
+    def test_provider_http_error_returns_graceful(self, hotspot: HotSpot) -> None:
+        optimizer = DefaultLLMOptimizer()
+        optimizer.provider = HTTPErrorMockProvider()
+        source = "def compute_sum(data):\n    return sum(data)"
+
+        attempt = optimizer.optimize_function(
+            source,
+            hotspot,
+            config=LLMConfig(provider="openai", model="gpt-4o", api_key_env_var="OPENAI_API_KEY"),
+        )
+
+        assert attempt.optimized_code == source
+        assert attempt.syntax_valid is False
+        assert attempt.error_message is not None
+        assert "429" in attempt.error_message
+
+    def test_provider_generic_error_returns_graceful(self, hotspot: HotSpot) -> None:
+        optimizer = DefaultLLMOptimizer()
+        optimizer.provider = GenericErrorMockProvider()
+        source = "def compute_sum(data):\n    return sum(data)"
+
+        attempt = optimizer.optimize_function(
+            source,
+            hotspot,
+            config=LLMConfig(provider="openai", model="gpt-4o", api_key_env_var="OPENAI_API_KEY"),
+        )
+
+        assert attempt.optimized_code == source
+        assert attempt.syntax_valid is False
+        assert attempt.error_message is not None
+        assert "connection refused" in attempt.error_message
+
+    def test_parse_empty_python_code_block(self) -> None:
+        optimizer = DefaultLLMOptimizer()
+        parsed = optimizer.parse_llm_response("```python\n```")
+
+        assert parsed == ""
 
     def test_no_code_block_yields_error(self, hotspot: HotSpot) -> None:
         optimizer = DefaultLLMOptimizer()

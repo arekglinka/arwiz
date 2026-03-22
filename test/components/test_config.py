@@ -185,6 +185,62 @@ class TestConfigValidation:
             mock_psutil.virtual_memory.return_value.total = 16 * 1024**3
             loader.load_config()
 
+    def test_threshold_over_100_raises(self, loader: DefaultConfigLoader) -> None:
+        """speedup_threshold_percent > 100 should raise ValueError."""
+        with (
+            patch.dict(
+                os.environ,
+                {"ARWIZ_SPEEDUP_THRESHOLD": "150"},
+                clear=False,
+            ),
+            patch("arwiz.config.core.psutil") as mock_psutil,
+            pytest.raises(ValueError, match="speedup_threshold_percent"),
+        ):
+            mock_psutil.virtual_memory.return_value.total = 16 * 1024**3
+            loader.load_config()
+
+    def test_threshold_negative_raises(self, loader: DefaultConfigLoader) -> None:
+        """Negative speedup_threshold_percent should raise ValueError."""
+        with (
+            patch.dict(
+                os.environ,
+                {"ARWIZ_SPEEDUP_THRESHOLD": "-10"},
+                clear=False,
+            ),
+            patch("arwiz.config.core.psutil") as mock_psutil,
+            pytest.raises(ValueError, match="speedup_threshold_percent"),
+        ):
+            mock_psutil.virtual_memory.return_value.total = 16 * 1024**3
+            loader.load_config()
+
+    def test_threshold_zero_accepted(self, loader: DefaultConfigLoader) -> None:
+        """speedup_threshold_percent=0 should NOT raise."""
+        with (
+            patch.dict(
+                os.environ,
+                {"ARWIZ_SPEEDUP_THRESHOLD": "0"},
+                clear=False,
+            ),
+            patch("arwiz.config.core.psutil") as mock_psutil,
+        ):
+            mock_psutil.virtual_memory.return_value.total = 16 * 1024**3
+            config = loader.load_config()
+        assert config.speedup_threshold_percent == 0
+
+    def test_threshold_100_accepted(self, loader: DefaultConfigLoader) -> None:
+        """speedup_threshold_percent=100 should NOT raise."""
+        with (
+            patch.dict(
+                os.environ,
+                {"ARWIZ_SPEEDUP_THRESHOLD": "100"},
+                clear=False,
+            ),
+            patch("arwiz.config.core.psutil") as mock_psutil,
+        ):
+            mock_psutil.virtual_memory.return_value.total = 16 * 1024**3
+            config = loader.load_config()
+        assert config.speedup_threshold_percent == 100
+
 
 class TestLlmEnvOverrides:
     """Test LLM-specific env var overrides."""

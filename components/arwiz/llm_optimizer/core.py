@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+import httpx
 from arwiz.foundation import HotSpot, LLMConfig, OptimizationAttempt
 from arwiz.llm_optimizer.prompts import (
     build_batch_io_prompt,
@@ -23,12 +24,33 @@ class DefaultLLMOptimizer:
         effective_config = config or self.config
         prompt = self.generate_prompt(source_code, hotspot, strategy="vectorization")
         provider = getattr(self, "provider", None) or get_provider(effective_config)
-        response = provider.generate(
-            prompt,
-            effective_config.model,
-            max_tokens=effective_config.max_tokens,
-            temperature=effective_config.temperature,
-        )
+        try:
+            response = provider.generate(
+                prompt,
+                effective_config.model,
+                max_tokens=effective_config.max_tokens,
+                temperature=effective_config.temperature,
+            )
+        except (httpx.TimeoutException, httpx.HTTPStatusError, httpx.ConnectError) as exc:
+            return OptimizationAttempt(
+                attempt_id=f"llm_{uuid4().hex[:12]}",
+                original_code=source_code,
+                optimized_code=source_code,
+                strategy="llm_generated",
+                llm_model=effective_config.model,
+                syntax_valid=False,
+                error_message=str(exc),
+            )
+        except Exception as exc:
+            return OptimizationAttempt(
+                attempt_id=f"llm_{uuid4().hex[:12]}",
+                original_code=source_code,
+                optimized_code=source_code,
+                strategy="llm_generated",
+                llm_model=effective_config.model,
+                syntax_valid=False,
+                error_message=str(exc),
+            )
         optimized_code = self.parse_llm_response(response)
         syntax_valid, error_message = self.validate_syntax(optimized_code)
 
@@ -88,11 +110,15 @@ class DefaultLLMOptimizer:
             for part in parts:
                 section = part.strip()
                 if section.startswith("python"):
-                    return section[len("python") :].strip()
+                    code = section[len("python") :].strip()
+                    if not code:
+                        continue
+                    return code
             for part in parts:
                 section = part.strip()
                 if section and not section.lower().startswith("python"):
                     return section
+            return ""
 
         lines = [line.rstrip() for line in response.strip().splitlines() if line.strip()]
         code_start = next(
