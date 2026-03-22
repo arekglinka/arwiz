@@ -7,6 +7,7 @@ with mocked subprocess execution.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,8 +16,9 @@ from arwiz.foundation import BranchCoverage
 from arwiz.orchestrator.core import DefaultOrchestrator
 from arwiz.process_manager.core import ProcessResult
 
-BRANCHING_PATH = "test/fixtures/targets/branching.py"
-SIMPLE_LOOP_PATH = "test/fixtures/targets/simple_loop.py"
+FIXTURES = Path(__file__).parent.parent / "fixtures" / "targets"
+BRANCHING_PATH = str(FIXTURES / "branching.py")
+SIMPLE_LOOP_PATH = str(FIXTURES / "simple_loop.py")
 
 
 def _make_process_result(traced_lines: list[int]) -> ProcessResult:
