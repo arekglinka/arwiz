@@ -1,3 +1,5 @@
+import warnings
+
 import pytest
 from arwiz.foundation import HotSpot
 from arwiz.template_optimizer.core import DefaultTemplateOptimizer
@@ -107,3 +109,15 @@ def compute(n):
     optimizer = DefaultTemplateOptimizer()
     transformed = optimizer.apply_template(source, "vectorize_loop")
     compile(transformed, "<string>", "exec")
+
+
+def test_add_caching_warns_on_unhashable_params() -> None:
+    source = "def process(data: list[int]) -> int:\n    return len(data)\n"
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        from arwiz.template_optimizer.templates.add_caching import apply_add_caching
+
+        apply_add_caching(source)
+        assert len(w) == 1
+        assert "unhashable" in str(w[0].message).lower()
+        assert "process" in str(w[0].message)

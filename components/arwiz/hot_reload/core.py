@@ -98,6 +98,19 @@ class DefaultHotReloader(HotReloadProtocol):
         original = self._originals.pop(key)
         setattr(module, function_name, original)
 
+    def clear_originals(self) -> int:
+        """Remove all stored originals.
+
+        Call after a profiling session to free memory. Does NOT restore
+        the original functions — use rollback() first if restoration is needed.
+
+        Returns:
+            Number of entries cleared.
+        """
+        count = len(self._originals)
+        self._originals.clear()
+        return count
+
     def _resolve_module(
         self,
         module_path: Path,

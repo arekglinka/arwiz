@@ -1,4 +1,29 @@
 import ast
+import warnings
+
+_UNHASHABLE_HINTS = {"dict", "list", "set", "frozenset", "DataFrame"}
+
+
+def _has_unhashable_params(node: ast.FunctionDef) -> bool:
+    for arg in node.args.args:
+        annotation = arg.annotation
+        if annotation is None:
+            continue
+        if isinstance(annotation, ast.Name) and annotation.id in _UNHASHABLE_HINTS:
+            return True
+        if (
+            isinstance(annotation, ast.Subscript)
+            and isinstance(annotation.value, ast.Name)
+            and annotation.value.id in _UNHASHABLE_HINTS
+        ):
+            return True
+        if (
+            isinstance(annotation, ast.Constant)
+            and isinstance(annotation.value, str)
+            and annotation.value in _UNHASHABLE_HINTS
+        ):
+            return True
+    return False
 
 
 def _is_lru_cache_decorator(decorator: ast.expr) -> bool:
@@ -22,6 +47,13 @@ class _CachingAdder(ast.NodeTransformer):
         self.generic_visit(node)
         has_cache = any(_is_lru_cache_decorator(deco) for deco in node.decorator_list)
         if not has_cache:
+            if _has_unhashable_params(node):
+                warnings.warn(
+                    f"[arwiz] Function '{node.name}' has parameters with "
+                    "unhashable type annotations. @lru_cache may fail at "
+                    "runtime for these parameter types.",
+                    stacklevel=2,
+                )
             self.modified = True
             node.decorator_list.insert(
                 0,

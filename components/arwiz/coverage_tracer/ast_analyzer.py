@@ -57,6 +57,13 @@ class _BranchVisitor(ast.NodeVisitor):
             self.branches.append((node.finalbody[0].lineno, "finally"))
         self.generic_visit(node)
 
+    def visit_Match(self, node: ast.Match) -> None:
+        """Collect match/case branches."""
+        self.branches.append((node.lineno, "match"))
+        for case in node.cases:
+            self.branches.append((case.pattern.lineno, "case"))
+        self.generic_visit(node)
+
 
 def get_static_branches(script_path: Path | str) -> list[tuple[int, str]]:
     """Parse a Python file and return all branch points.

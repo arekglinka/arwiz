@@ -270,3 +270,34 @@ class TestProviderErrors:
         assert str(hotspot.cumulative_time_ms) in prompt
         assert hotspot.file_path in prompt
         assert source in prompt
+
+
+class TestApiKeyValidation:
+    def test_openai_empty_key_raises(self) -> None:
+        from arwiz.llm_optimizer.providers import OpenAIProvider
+
+        provider = OpenAIProvider(api_key="")
+        with pytest.raises(ValueError, match="API key is required"):
+            provider.generate("test prompt", "gpt-4o")
+
+    def test_anthropic_empty_key_raises(self) -> None:
+        from arwiz.llm_optimizer.providers import AnthropicProvider
+
+        provider = AnthropicProvider(api_key="")
+        with pytest.raises(ValueError, match="API key is required"):
+            provider.generate("test prompt", "claude-3-opus")
+
+    def test_openai_whitespace_key_raises(self) -> None:
+        from arwiz.llm_optimizer.providers import OpenAIProvider
+
+        provider = OpenAIProvider(api_key="   ")
+        with pytest.raises(ValueError, match="API key is required"):
+            provider.generate("test prompt", "gpt-4o")
+
+    def test_ollama_no_key_needed(self) -> None:
+        from arwiz.llm_optimizer.providers import OllamaProvider
+
+        provider = OllamaProvider()
+        # Should NOT raise — Ollama has no API key validation
+        # (it will fail on connection, but that's different)
+        assert provider.base_url == "http://localhost:11434"

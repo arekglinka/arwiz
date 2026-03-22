@@ -26,6 +26,11 @@ class OpenAIProvider:
         self.base_url = (base_url or "https://api.openai.com").rstrip("/")
 
     def generate(self, prompt: str, model: str, **kwargs: object) -> str:
+        if not self.api_key or not self.api_key.strip():
+            raise ValueError(
+                "OpenAI API key is required. Set the OPENAI_API_KEY "
+                "environment variable or pass api_key in LLMConfig."
+            )
         response: Any = httpx.post(
             url=f"{self.base_url}/v1/chat/completions",
             headers={"Authorization": f"Bearer {self.api_key}"},
@@ -47,6 +52,11 @@ class AnthropicProvider:
         self.base_url = (base_url or "https://api.anthropic.com").rstrip("/")
 
     def generate(self, prompt: str, model: str, **kwargs: object) -> str:
+        if not self.api_key or not self.api_key.strip():
+            raise ValueError(
+                "Anthropic API key is required. Set the ANTHROPIC_API_KEY "
+                "environment variable or pass api_key in LLMConfig."
+            )
         raw_max_tokens = kwargs.pop("max_tokens", 1024)
         max_tokens = raw_max_tokens if isinstance(raw_max_tokens, int) else 1024
         response: Any = httpx.post(

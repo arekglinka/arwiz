@@ -43,6 +43,16 @@ class TestIsClose:
         assert is_close("abc", "abc")
         assert not is_close("abc", "def")
 
+    def test_relative_tolerance_large_values(self) -> None:
+        # rel_tol * 1e12 = 1000 > 1.0, so passes despite atol=1e-6
+        assert is_close(1e12, 1e12 + 1.0, tolerance=1e-6)
+
+    def test_relative_tolerance_small_values(self) -> None:
+        assert is_close(0.0, 0.5e-6, tolerance=1e-6)
+
+    def test_both_zero(self) -> None:
+        assert is_close(0.0, 0.0)
+
 
 class TestArraysClose:
     def test_identical_arrays(self) -> None:

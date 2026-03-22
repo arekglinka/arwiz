@@ -115,6 +115,19 @@ class TestRollback:
         with pytest.raises(KeyError):
             reloader.rollback(simple_loop_path, "compute_sum")
 
+    def test_clear_originals_frees_memory(self, simple_loop_path: Path) -> None:
+        reloader = DefaultHotReloader()
+        new_source = "def compute_sum(data):\n    return 999\n"
+        reloader.reload_function(simple_loop_path, "compute_sum", new_source)
+        assert len(reloader._originals) == 1
+
+        cleared = reloader.clear_originals()
+        assert cleared == 1
+        assert len(reloader._originals) == 0
+        # After clear, rollback should fail since original is gone
+        with pytest.raises(KeyError):
+            reloader.rollback(simple_loop_path, "compute_sum")
+
 
 class TestWrapper:
     def test_calls_optimized(self) -> None:

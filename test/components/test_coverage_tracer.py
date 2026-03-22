@@ -163,6 +163,24 @@ class TestEdgeCases:
         branches = get_static_branches(script)
         assert branches == []
 
+    def test_detects_match_case_branches(self, tmp_path: Path) -> None:
+        script = tmp_path / "match_example.py"
+        script.write_text(
+            "def classify(value):\n"
+            "    match value:\n"
+            "        case 0:\n"
+            "            return 'zero'\n"
+            "        case 1:\n"
+            "            return 'one'\n"
+            "        case _:\n"
+            "            return 'other'\n",
+            encoding="utf-8",
+        )
+        branches = get_static_branches(script)
+        types = [b[1] for b in branches]
+        assert "match" in types
+        assert types.count("case") == 3
+
     def test_nonexistent_file_raises(self, tmp_path: Path) -> None:
         with pytest.raises(FileNotFoundError):
             get_static_branches(tmp_path / "does_not_exist.py")

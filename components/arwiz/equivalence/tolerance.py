@@ -16,7 +16,7 @@ def is_close(a: Any, b: Any, tolerance: float = 1e-6) -> bool:
             return False
         if math.isinf(a) or math.isinf(b):
             return a == b
-        return abs(a - b) <= tolerance
+        return math.isclose(a, b, rel_tol=1e-9, abs_tol=tolerance)
 
     if isinstance(a, (np.floating, np.integer)) or isinstance(b, (np.floating, np.integer)):
         a_f, b_f = float(a), float(b)
