@@ -74,16 +74,28 @@ class DummyHotspotDetector:
 
 
 class DummyTemplateOptimizer:
-    def __init__(self, optimized_source: str) -> None:
+    def __init__(
+        self,
+        optimized_source: str,
+        templates: list[str] | None = None,
+        template_outputs: dict[str, str] | None = None,
+    ) -> None:
         self.optimized_source = optimized_source
+        self.templates = templates or ["vectorize_loop", "numba_jit"]
+        self.template_outputs = template_outputs or {}
+        self.applied_templates: list[str] = []
 
     def detect_applicable_templates(
         self, source_code: str, hotspot: HotSpot | None = None
     ) -> list[str]:
         return ["vectorize_loop"]
 
+    def list_templates(self) -> list[str]:
+        return list(self.templates)
+
     def apply_template(self, source_code: str, template_name: str) -> str:  # noqa: ARG002
-        return self.optimized_source
+        self.applied_templates.append(template_name)
+        return self.template_outputs.get(template_name, self.optimized_source)
 
 
 class DummyLlmOptimizer:
@@ -124,6 +136,30 @@ class DummyCoverageTracer:
             for item in coverage.branch_details
             if not item.taken
         ]
+
+
+class DummyBackendSelector:
+    def __init__(
+        self,
+        selected_backends: list[str] | None = None,
+        ranking: list[tuple[str, float]] | None = None,
+    ) -> None:
+        self.selected_backends = selected_backends or ["numba"]
+        self.ranking = ranking or [("numba", 0.7)]
+
+    def select_backends(self, source_code: str, hotspot: HotSpot | None = None) -> list[str]:  # noqa: ARG002
+        return list(self.selected_backends)
+
+    def get_manifest(self):
+        return {}
+
+    def is_backend_available(self, name: str) -> bool:  # noqa: ARG002
+        return True
+
+    def rank_backends(
+        self, source_code: str, hotspot: HotSpot | None = None
+    ) -> list[tuple[str, float]]:  # noqa: ARG002
+        return list(self.ranking)
 
 
 def test_profile_optimize_pipeline_template_strategy(tmp_path: Path) -> None:
@@ -300,6 +336,126 @@ class FailingConfigLoader:
 
 
 class TestAutoStrategy:
+    def test_auto_uses_backend_selector_order_for_templates(self, tmp_path: Path) -> None:
+        script = _write_script(
+            tmp_path,
+            "def target(x):\n    out = [0] * x\n    for i in range(x):\n"
+            "        out[i] = i\n    return out\n",
+        )
+        profiler_result = _profile_result(script)
+        hotspot = _hotspot("target", script)
+        llm_opt = TrackingLlmOptimizer()
+        template_optimizer = DummyTemplateOptimizer(
+            "def target(x):\n    return [i for i in range(x)]\n",
+            templates=["cython_optimize", "numba_jit"],
+        )
+        orchestrator = DefaultOrchestrator(
+            config_loader=DummyConfigLoader(),
+            profiler=DummyProfiler(profile_result=profiler_result),
+            hotspot_detector=DummyHotspotDetector([hotspot]),
+            template_optimizer=template_optimizer,
+            llm_optimizer=llm_opt,
+            equivalence_checker=ConditionalEquivalenceChecker([(True, "")]),
+            backend_selector=DummyBackendSelector(
+                selected_backends=["cython", "numba"],
+                ranking=[("cython", 0.9), ("numba", 0.7)],
+            ),
+        )
+
+        result = orchestrator.run_profile_optimize_pipeline(
+            script_path=str(script),
+            function_name="target",
+            strategy="auto",
+        )
+
+        assert result.best_attempt is not None
+        assert result.best_attempt.template_name == "cython_optimize"
+        assert result.best_attempt.backend == "cython"
+        assert len(result.attempts) == 1
+        assert result.attempts[0].backend == "cython"
+        assert template_optimizer.applied_templates == ["cython_optimize"]
+        assert llm_opt.called is False
+
+    def test_auto_falls_back_to_llm_after_backend_templates_fail(self, tmp_path: Path) -> None:
+        script = _write_script(tmp_path, "def target(x):\n    return x + 1\n")
+        profiler_result = _profile_result(script)
+        hotspot = _hotspot("target", script)
+        llm_opt = DummyLlmOptimizer("def target(x):\n    return x + 1\n")
+        template_optimizer = DummyTemplateOptimizer(
+            "def target(x):\n    return x + 2\n",
+            templates=["cython_optimize", "numba_jit"],
+            template_outputs={
+                "cython_optimize": "def target(x):\n    return x + 2\n",
+                "numba_jit": "def target(x):\n    return x + 3\n",
+            },
+        )
+        orchestrator = DefaultOrchestrator(
+            config_loader=DummyConfigLoader(),
+            profiler=DummyProfiler(profile_result=profiler_result),
+            hotspot_detector=DummyHotspotDetector([hotspot]),
+            template_optimizer=template_optimizer,
+            llm_optimizer=llm_opt,
+            equivalence_checker=ConditionalEquivalenceChecker(
+                [(False, "cython mismatch"), (False, "numba mismatch"), (True, "")]
+            ),
+            backend_selector=DummyBackendSelector(
+                selected_backends=["cython", "numba"],
+                ranking=[("cython", 0.9), ("numba", 0.7)],
+            ),
+        )
+
+        result = orchestrator.run_profile_optimize_pipeline(
+            script_path=str(script),
+            function_name="target",
+            strategy="auto",
+        )
+
+        assert result.best_attempt is not None
+        assert result.best_attempt.strategy == "llm_generated"
+        assert len(result.attempts) == 3
+        assert result.attempts[0].template_name == "cython_optimize"
+        assert result.attempts[0].backend == "cython"
+        assert result.attempts[0].passed_equivalence is False
+        assert result.attempts[1].template_name == "numba_jit"
+        assert result.attempts[1].backend == "numba"
+        assert result.attempts[1].passed_equivalence is False
+
+    def test_specific_backend_strategy_uses_backend_template(self, tmp_path: Path) -> None:
+        script = _write_script(
+            tmp_path,
+            "def target(x):\n    out = [0] * x\n    for i in range(x):\n"
+            "        out[i] = i\n    return out\n",
+        )
+        profiler_result = _profile_result(script)
+        hotspot = _hotspot("target", script)
+        llm_opt = TrackingLlmOptimizer()
+        template_optimizer = DummyTemplateOptimizer(
+            "def target(x):\n    return [i for i in range(x)]\n",
+            templates=["cython_optimize"],
+        )
+        orchestrator = DefaultOrchestrator(
+            config_loader=DummyConfigLoader(),
+            profiler=DummyProfiler(profile_result=profiler_result),
+            hotspot_detector=DummyHotspotDetector([hotspot]),
+            template_optimizer=template_optimizer,
+            llm_optimizer=llm_opt,
+            equivalence_checker=ConditionalEquivalenceChecker([(True, "")]),
+            backend_selector=DummyBackendSelector(selected_backends=["numba"]),
+        )
+
+        result = orchestrator.run_profile_optimize_pipeline(
+            script_path=str(script),
+            function_name="target",
+            strategy="cython",
+        )
+
+        assert result.best_attempt is not None
+        assert result.best_attempt.template_name == "cython_optimize"
+        assert result.best_attempt.backend == "cython"
+        assert len(result.attempts) == 1
+        assert template_optimizer.applied_templates == ["cython_optimize"]
+        assert llm_opt.called is False
+
     def test_auto_falls_back_to_llm_when_template_fails(self, tmp_path: Path) -> None:
         script = _write_script(tmp_path, "def target(x):\n    return x + 1\n")
         profiler_result = _profile_result(script)
@@ -314,6 +470,7 @@ class TestAutoStrategy:
             equivalence_checker=ConditionalEquivalenceChecker(
                 [(False, "output mismatch"), (True, "")]
             ),
+            backend_selector=DummyBackendSelector(selected_backends=["numba"]),
         )
 
         result = orchestrator.run_profile_optimize_pipeline(
@@ -325,7 +482,8 @@ class TestAutoStrategy:
         assert result.best_attempt is not None
         assert result.best_attempt.strategy == "llm_generated"
         assert len(result.attempts) == 2
-        assert result.attempts[0].strategy == "template"
+        assert result.attempts[0].template_name == "numba_jit"
+        assert result.attempts[0].backend == "numba"
         assert result.attempts[0].passed_equivalence is False
 
     def test_auto_uses_template_when_template_succeeds(self, tmp_path: Path) -> None:
@@ -340,6 +498,7 @@ class TestAutoStrategy:
             template_optimizer=DummyTemplateOptimizer("def target(x):\n    return x + 1\n"),
             llm_optimizer=tracking_llm,
             equivalence_checker=ConditionalEquivalenceChecker([(True, "")]),
+            backend_selector=DummyBackendSelector(selected_backends=["numba"]),
         )
 
         result = orchestrator.run_profile_optimize_pipeline(
@@ -350,8 +509,33 @@ class TestAutoStrategy:
 
         assert result.best_attempt is not None
         assert result.best_attempt.strategy == "template"
+        assert result.best_attempt.template_name == "numba_jit"
+        assert result.best_attempt.backend == "numba"
         assert len(result.attempts) == 1
         assert tracking_llm.called is False
+
+    def test_template_strategy_remains_backward_compatible(self, tmp_path: Path) -> None:
+        script = _write_script(tmp_path, "def target(x):\n    return x + 1\n")
+        profiler_result = _profile_result(script)
+        hotspot = _hotspot("target", script)
+        orchestrator = DefaultOrchestrator(
+            config_loader=DummyConfigLoader(),
+            profiler=DummyProfiler(profile_result=profiler_result),
+            hotspot_detector=DummyHotspotDetector([hotspot]),
+            template_optimizer=DummyTemplateOptimizer("def target(x):\n    return x + 1\n"),
+            equivalence_checker=DummyEquivalenceChecker(equivalent=True),
+        )
+
+        result = orchestrator.run_profile_optimize_pipeline(
+            script_path=str(script),
+            function_name="target",
+            strategy="template",
+        )
+
+        assert result.best_attempt is not None
+        assert result.best_attempt.strategy == "template"
+        assert result.best_attempt.template_name == "vectorize_loop"
+        assert result.best_attempt.backend is None
 
     def test_coverage_pipeline_records_all_steps(self, tmp_path: Path) -> None:
         script = _write_script(tmp_path, "def main():\n    return 1\n")
@@ -429,3 +613,16 @@ class TestAutoStrategy:
         assert "detect_hotspots" in step_names
         assert "find_target_hotspot" in step_names
         assert state.steps[-1].status == "failed"
+
+
+def test_constructor_accepts_backend_selector_dependency() -> None:
+    selector = DummyBackendSelector()
+    orchestrator = DefaultOrchestrator(backend_selector=selector)
+    assert orchestrator._backend_selector is selector  # noqa: SLF001
+
+
+def test_constructor_creates_default_backend_selector_when_not_provided() -> None:
+    orchestrator = DefaultOrchestrator()
+    selector = orchestrator._backend_selector  # noqa: SLF001
+    assert selector is not None
+    assert selector.__class__.__name__ == "DefaultBackendSelector"

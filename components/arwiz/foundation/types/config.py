@@ -15,6 +15,13 @@ class OptimizationStrategy(StrEnum):
     TEMPLATE = "template"
     NUMPY = "numpy"
     NUMBA = "numba"
+    CYTHON = "cython"
+    JAX = "jax"
+    CUPY = "cupy"
+    NUMEXPR = "numexpr"
+    PYO3 = "pyo3"
+    CFFI = "cffi"
+    TAICHI = "taichi"
 
 
 class LLMConfig(BaseModel):

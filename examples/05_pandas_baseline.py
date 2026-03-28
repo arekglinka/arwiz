@@ -75,7 +75,7 @@ def compute_risk_scores(
 
 
 def main() -> None:
-    N = 500
+    N = 500  # noqa: N806
     data = generate_data(N)
 
     start = time.perf_counter()

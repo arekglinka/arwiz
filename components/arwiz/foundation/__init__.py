@@ -1,3 +1,4 @@
+from arwiz.foundation.types.backend import BackendInfo
 from arwiz.foundation.types.config import (
     ArwizConfig,
     LLMConfig,
@@ -23,4 +24,5 @@ __all__ = [
     "LLMConfig",
     "ProfilerType",
     "OptimizationStrategy",
+    "BackendInfo",
 ]

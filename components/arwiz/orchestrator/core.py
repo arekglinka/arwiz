@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import ast
+from importlib import import_module
 from inspect import Parameter, Signature, signature
 from pathlib import Path
 from time import perf_counter
+from typing import Any
 from uuid import uuid4
 
 from ..config import DefaultConfigLoader
@@ -28,6 +30,17 @@ from .pipeline_state import PipelineState
 
 
 class DefaultOrchestrator:
+    _BACKEND_TEMPLATE_MAP: dict[str, str] = {
+        "numba": "numba_jit",
+        "cython": "cython_optimize",
+        "numba_parallel": "numba_parallel",
+        "jax": "jax_optimize",
+        "cupy": "cupy_optimize",
+        "numexpr": "numexpr_optimize",
+        "pyo3": "pyo3_optimize",
+        "cffi": "cffi_optimize",
+    }
+
     def __init__(
         self,
         config_loader: DefaultConfigLoader | None = None,
@@ -38,6 +51,7 @@ class DefaultOrchestrator:
         equivalence_checker: DefaultEquivalenceChecker | None = None,
         coverage_tracer: DefaultCoverageTracer | None = None,
         process_manager: DefaultProcessManager | None = None,
+        backend_selector: Any | None = None,
     ) -> None:
         self._process_manager = process_manager or DefaultProcessManager()
         self._config_loader = config_loader or DefaultConfigLoader()
@@ -47,6 +61,11 @@ class DefaultOrchestrator:
         self._llm_optimizer = llm_optimizer or DefaultLLMOptimizer()
         self._equivalence_checker = equivalence_checker or DefaultEquivalenceChecker()
         self._coverage_tracer = coverage_tracer or DefaultCoverageTracer()
+        if backend_selector is None:
+            selector_cls = import_module("arwiz.backend_selector").DefaultBackendSelector
+            self._backend_selector = selector_cls()
+        else:
+            self._backend_selector = backend_selector
         self.last_pipeline_state: PipelineState | None = None
 
     def run_profile_optimize_pipeline(
@@ -102,11 +121,25 @@ class DefaultOrchestrator:
             )
 
         attempts: list[OptimizationAttempt] = []
+
+        backend_ranking: list[tuple[str, float]] = []
+        try:
+            backend_ranking = self._backend_selector.rank_backends(original_source, target_hotspot)
+        except Exception:
+            backend_ranking = []
+        state.backend_ranking = backend_ranking
+
         selected_strategy = strategy.lower().strip()
-        if selected_strategy not in {"auto", "template", "llm"}:
+        allowed_strategies = {
+            "auto",
+            "template",
+            "llm",
+            *self._BACKEND_TEMPLATE_MAP.keys(),
+        }
+        if selected_strategy not in allowed_strategies:
             selected_strategy = "auto"
 
-        if selected_strategy in {"template", "auto"}:
+        if selected_strategy == "template":
             try:
                 template_attempt = self._run_template_attempt(
                     state=state,
@@ -124,9 +157,96 @@ class DefaultOrchestrator:
                     error_message=str(exc),
                 )
             attempts.append(template_attempt)
-            if selected_strategy == "template" or (
-                template_attempt.syntax_valid and template_attempt.passed_equivalence
-            ):
+            return self._build_result(function_name, script_path, attempts)
+
+        if selected_strategy == "auto":
+            try:
+                selected_backends = self._run_step(
+                    state,
+                    "select_backends",
+                    lambda: self._backend_selector.select_backends(original_source, target_hotspot),
+                )
+            except Exception:
+                selected_backends = []
+
+            for backend_name in selected_backends:
+                template_name = self._BACKEND_TEMPLATE_MAP.get(backend_name)
+                if not template_name:
+                    continue
+
+                available_templates = self._run_step(
+                    state,
+                    "list_templates",
+                    self._template_optimizer.list_templates,
+                )
+                if template_name not in available_templates:
+                    continue
+
+                try:
+                    backend_attempt = self._run_backend_template_attempt(
+                        state=state,
+                        source=original_source,
+                        function_name=function_name,
+                        tolerance=cfg.equivalence_tolerance,
+                        backend_name=backend_name,
+                        template_name=template_name,
+                    )
+                except Exception as exc:
+                    backend_attempt = OptimizationAttempt(
+                        attempt_id=f"opt_{uuid4().hex[:12]}",
+                        original_code=original_source,
+                        optimized_code="",
+                        strategy="template",
+                        template_name=template_name,
+                        backend=backend_name,
+                        error_message=str(exc),
+                    )
+                attempts.append(backend_attempt)
+                if backend_attempt.syntax_valid and backend_attempt.passed_equivalence:
+                    return self._build_result(function_name, script_path, attempts)
+
+        if selected_strategy in self._BACKEND_TEMPLATE_MAP:
+            backend_name = selected_strategy
+            template_name = self._BACKEND_TEMPLATE_MAP[backend_name]
+            available_templates = self._run_step(
+                state,
+                "list_templates",
+                self._template_optimizer.list_templates,
+            )
+            if template_name in available_templates:
+                try:
+                    backend_attempt = self._run_backend_template_attempt(
+                        state=state,
+                        source=original_source,
+                        function_name=function_name,
+                        tolerance=cfg.equivalence_tolerance,
+                        backend_name=backend_name,
+                        template_name=template_name,
+                    )
+                except Exception as exc:
+                    backend_attempt = OptimizationAttempt(
+                        attempt_id=f"opt_{uuid4().hex[:12]}",
+                        original_code=original_source,
+                        optimized_code="",
+                        strategy="template",
+                        template_name=template_name,
+                        backend=backend_name,
+                        error_message=str(exc),
+                    )
+            else:
+                backend_attempt = OptimizationAttempt(
+                    attempt_id=f"opt_{uuid4().hex[:12]}",
+                    original_code=original_source,
+                    optimized_code=original_source,
+                    strategy="template",
+                    template_name=template_name,
+                    backend=backend_name,
+                    syntax_valid=True,
+                    passed_equivalence=False,
+                    error_message=f"Template '{template_name}' not available",
+                )
+            attempts.append(backend_attempt)
+            if backend_attempt.syntax_valid and backend_attempt.passed_equivalence:
                 return self._build_result(function_name, script_path, attempts)
 
         try:
@@ -230,6 +350,34 @@ class DefaultOrchestrator:
         return self._finalize_attempt(
             state=state,
             attempt=attempt,
+            function_name=function_name,
+            tolerance=tolerance,
+        )
+
+    def _run_backend_template_attempt(
+        self,
+        state: PipelineState,
+        source: str,
+        function_name: str,
+        tolerance: float,
+        backend_name: str,
+        template_name: str,
+    ) -> OptimizationAttempt:
+        optimized_source = self._run_step(
+            state,
+            "apply_template",
+            lambda: self._template_optimizer.apply_template(source, template_name),
+        )
+        return self._finalize_attempt(
+            state=state,
+            attempt=OptimizationAttempt(
+                attempt_id=f"opt_{uuid4().hex[:12]}",
+                original_code=source,
+                optimized_code=optimized_source,
+                strategy="template",
+                template_name=template_name,
+                backend=backend_name,
+            ),
             function_name=function_name,
             tolerance=tolerance,
         )

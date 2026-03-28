@@ -10,6 +10,7 @@ class OptimizationAttempt(BaseModel):
     strategy: str
     llm_model: str | None = None
     template_name: str | None = None
+    backend: str | None = None
     syntax_valid: bool = False
     passed_equivalence: bool = False
     speedup_percent: float = 0.0
