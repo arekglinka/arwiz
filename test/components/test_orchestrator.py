@@ -24,6 +24,12 @@ DefaultOrchestrator = orchestrator_module.DefaultOrchestrator
 PipelineState = pipeline_module.PipelineState
 PipelineStep = pipeline_module.PipelineStep
 
+from test.conftest import (  # noqa: E402
+    DummyConfigLoader,
+    DummyHotspotDetector,
+    SequenceEquivalenceChecker,
+)
+
 
 def _write_script(tmp_path: Path, source: str) -> Path:
     script = tmp_path / "target.py"
@@ -46,11 +52,6 @@ def _hotspot(function_name: str, script_path: Path) -> HotSpot:
     )
 
 
-class DummyConfigLoader:
-    def load_config(self, config_path=None) -> ArwizConfig:  # noqa: ANN001, ARG002
-        return ArwizConfig()
-
-
 class DummyProfiler:
     def __init__(
         self, profile_result: ProfileResult | None = None, should_fail: bool = False
@@ -63,14 +64,6 @@ class DummyProfiler:
             msg = "profiling boom"
             raise RuntimeError(msg)
         return self.profile_result or ProfileResult(script_path=str(script_path), duration_ms=50.0)
-
-
-class DummyHotspotDetector:
-    def __init__(self, hotspots: list[HotSpot]) -> None:
-        self.hotspots = hotspots
-
-    def detect_hotspots(self, profile_result, threshold_pct=5.0):  # noqa: ANN001, ARG002
-        return self.hotspots
 
 
 class DummyTemplateOptimizer:
@@ -306,19 +299,6 @@ def test_when_function_not_found_in_hotspots(tmp_path: Path) -> None:
     assert "not found in detected hotspots" in (result.attempts[0].error_message or "")
 
 
-class ConditionalEquivalenceChecker:
-    def __init__(self, results: list[tuple[bool, str]]) -> None:
-        self._results = list(results)
-        self._idx = 0
-
-    def check_equivalence(  # noqa: ANN001, ARG002
-        self, original, optimized, tolerance=1e-6
-    ):
-        result = self._results[self._idx]
-        self._idx += 1
-        return result
-
-
 class TrackingLlmOptimizer(DummyLlmOptimizer):
     def __init__(self) -> None:
         super().__init__("")
@@ -355,7 +335,7 @@ class TestAutoStrategy:
             hotspot_detector=DummyHotspotDetector([hotspot]),
             template_optimizer=template_optimizer,
             llm_optimizer=llm_opt,
-            equivalence_checker=ConditionalEquivalenceChecker([(True, "")]),
+            equivalence_checker=SequenceEquivalenceChecker([(True, "")]),
             backend_selector=DummyBackendSelector(
                 selected_backends=["cython", "numba"],
                 ranking=[("cython", 0.9), ("numba", 0.7)],
@@ -395,7 +375,7 @@ class TestAutoStrategy:
             hotspot_detector=DummyHotspotDetector([hotspot]),
             template_optimizer=template_optimizer,
             llm_optimizer=llm_opt,
-            equivalence_checker=ConditionalEquivalenceChecker(
+            equivalence_checker=SequenceEquivalenceChecker(
                 [(False, "cython mismatch"), (False, "numba mismatch"), (True, "")]
             ),
             backend_selector=DummyBackendSelector(
@@ -439,7 +419,7 @@ class TestAutoStrategy:
             hotspot_detector=DummyHotspotDetector([hotspot]),
             template_optimizer=template_optimizer,
             llm_optimizer=llm_opt,
-            equivalence_checker=ConditionalEquivalenceChecker([(True, "")]),
+            equivalence_checker=SequenceEquivalenceChecker([(True, "")]),
             backend_selector=DummyBackendSelector(selected_backends=["numba"]),
         )
 
@@ -467,7 +447,7 @@ class TestAutoStrategy:
             hotspot_detector=DummyHotspotDetector([hotspot]),
             template_optimizer=DummyTemplateOptimizer("def target(x):\n    return x + 2\n"),
             llm_optimizer=llm_opt,
-            equivalence_checker=ConditionalEquivalenceChecker(
+            equivalence_checker=SequenceEquivalenceChecker(
                 [(False, "output mismatch"), (True, "")]
             ),
             backend_selector=DummyBackendSelector(selected_backends=["numba"]),
@@ -497,7 +477,7 @@ class TestAutoStrategy:
             hotspot_detector=DummyHotspotDetector([hotspot]),
             template_optimizer=DummyTemplateOptimizer("def target(x):\n    return x + 1\n"),
             llm_optimizer=tracking_llm,
-            equivalence_checker=ConditionalEquivalenceChecker([(True, "")]),
+            equivalence_checker=SequenceEquivalenceChecker([(True, "")]),
             backend_selector=DummyBackendSelector(selected_backends=["numba"]),
         )
 

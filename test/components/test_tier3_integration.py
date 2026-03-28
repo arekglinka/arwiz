@@ -54,24 +54,30 @@ def test_selector_to_orchestrator_pyo3_pipeline_mock(
     assert mapping["pyo3"] == "pyo3_optimize"
 
 
-def test_cffi_reachable_only_via_explicit_strategy_not_selector_heuristic(
+def test_cffi_reachable_via_selector_heuristic(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     selector_mod = _import("arwiz.backend_selector.core")
     selector = selector_mod.DefaultBackendSelector()
     monkeypatch.setattr(selector, "is_backend_available", lambda name: True)
 
-    sources = [
+    loop_arithmetic = (
         "def f(data, n):\n"
         "    result = [0] * n\n"
         "    for i in range(n):\n"
         "        result[i] = data[i] * 2\n"
-        "    return result\n",
-        "def f(s):\n    return s.split(',')\n",
-    ]
-    for source in sources:
-        selected = selector.select_backends(source, None)
-        assert "cffi" not in selected
+        "    return result\n"
+    )
+    ranked = selector.rank_backends(loop_arithmetic, None)
+    ranked_map = dict(ranked)
+
+    assert "cffi" in ranked_map
+    assert ranked_map["cffi"] == 0.4
+    assert ranked_map["numexpr"] > ranked_map["cffi"]
+
+    string_source = "def f(s):\n    return s.split(',')\n"
+    selected = selector.select_backends(string_source, None)
+    assert "cffi" not in selected
 
     orchestrator_mod = _import("arwiz.orchestrator.core")
     mapping = orchestrator_mod.DefaultOrchestrator._BACKEND_TEMPLATE_MAP

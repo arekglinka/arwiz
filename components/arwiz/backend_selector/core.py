@@ -22,11 +22,13 @@ class DefaultBackendSelector:
         source_code: str,
         has_loops: bool,
         has_array_ops: bool,
+        tree: ast.Module | None = None,
     ) -> bool:
         if has_loops or not has_array_ops:
             return False
 
-        tree = ast.parse(source_code)
+        if tree is None:
+            tree = ast.parse(source_code)
         vectorized_ops = {
             "dot",
             "sum",
@@ -109,12 +111,14 @@ class DefaultBackendSelector:
         return True
 
     def _heuristic_ranking(self, source_code: str) -> list[tuple[str, float]]:
-        has_loops = bool(self._detect_for_loops(source_code))
-        has_array_ops = bool(self._detect_array_operations(source_code))
-        has_string_ops = bool(self._detect_string_operations(source_code))
+        tree = ast.parse(source_code)
+
+        has_loops = bool(self._detect_for_loops(source_code, tree=tree))
+        has_array_ops = bool(self._detect_array_operations(source_code, tree=tree))
+        has_string_ops = bool(self._detect_string_operations(source_code, tree=tree))
 
         if not has_string_ops and self._is_pure_numpy_vectorized(
-            source_code, has_loops, has_array_ops
+            source_code, has_loops, has_array_ops, tree=tree
         ):
             return []
 
@@ -127,11 +131,11 @@ class DefaultBackendSelector:
         if has_string_ops:
             _recommend(["pyo3"], 0.9)
 
-        data_types = self._detect_data_types(source_code)
+        data_types = self._detect_data_types(source_code, tree=tree)
         if any(dtype == "ndarray" for dtype in data_types.values()):
             _recommend(["numba", "cython"], 0.7)
 
-        control_flow = self._detect_control_flow_complexity(source_code)
+        control_flow = self._detect_control_flow_complexity(source_code, tree=tree)
         if bool(control_flow.get("has_nested_loops")):
             _recommend(["cython", "numba"], 0.7)
 
@@ -141,7 +145,7 @@ class DefaultBackendSelector:
         if has_array_ops and not has_loops:
             _recommend(["jax", "cupy"], 0.6)
 
-        memory_patterns = self._detect_memory_access_patterns(source_code)
+        memory_patterns = self._detect_memory_access_patterns(source_code, tree=tree)
 
         # Arithmetic on array elements in loops → numexpr
         has_arithmetic_ops = any(op in source_code for op in ("+", "-", "*", "/", "**"))
@@ -152,6 +156,15 @@ class DefaultBackendSelector:
             and not has_array_ops
         ):
             _recommend(["numexpr"], 0.5)
+
+        # Indexed arithmetic in loops → cffi (lower confidence than numexpr, more setup)
+        if (
+            has_loops
+            and "sequential" in memory_patterns
+            and has_arithmetic_ops
+            and not has_string_ops
+        ):
+            _recommend(["cffi"], 0.4)
 
         if "strided" in memory_patterns:
             _recommend(["cython"], 0.6)

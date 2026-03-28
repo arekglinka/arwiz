@@ -23,10 +23,10 @@ class DummyProfiler:
 
 class DummyHotspotDetector:
     def __init__(self, hotspots: list[Any]) -> None:
-        self._hotspots = hotspots
+        self.hotspots = hotspots
 
     def detect_hotspots(self, _profile_result, _threshold_pct=5.0):  # noqa: ANN001
-        return list(self._hotspots)
+        return list(self.hotspots)
 
 
 class SequenceEquivalenceChecker:
@@ -37,3 +37,12 @@ class SequenceEquivalenceChecker:
         if self._outcomes:
             return self._outcomes.pop(0)
         return True, ""
+
+
+class DummyEquivalenceChecker:
+    def __init__(self, equivalent: bool = True, reason: str = "") -> None:
+        self.equivalent = equivalent
+        self.reason = reason
+
+    def check_equivalence(self, *args, **kwargs):  # noqa: ANN002, ANN003, ARG002
+        return self.equivalent, self.reason
