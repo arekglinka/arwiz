@@ -1,5 +1,7 @@
 import ast
 
+from .._shared import has_import
+
 
 def _is_cython_cfunc_decorator(decorator: ast.expr) -> bool:
     if isinstance(decorator, ast.Attribute) and isinstance(decorator.value, ast.Name):
@@ -12,17 +14,6 @@ def _is_cython_cfunc_decorator(decorator: ast.expr) -> bool:
         return _is_cython_cfunc_decorator(decorator.func)
 
     return "cython.cfunc" in ast.unparse(decorator)
-
-
-def _has_cython_import(tree: ast.Module) -> bool:
-    for stmt in tree.body:
-        if isinstance(stmt, ast.Import):
-            for alias in stmt.names:
-                if alias.name == "cython":
-                    return True
-        if isinstance(stmt, ast.ImportFrom) and stmt.module == "cython":
-            return True
-    return False
 
 
 def _function_uses_name(node: ast.FunctionDef, name: str) -> bool:
@@ -100,13 +91,17 @@ class _CythonTransformer(ast.NodeTransformer):
 
 
 def apply_cython_optimize(source_code: str) -> str:
-    tree = ast.parse(source_code)
+    try:
+        tree = ast.parse(source_code)
+    except (SyntaxError, ValueError):
+        return source_code
+
     transformer = _CythonTransformer()
     transformed = transformer.visit(tree)
     if (
         transformer.modified
         and isinstance(transformed, ast.Module)
-        and not _has_cython_import(transformed)
+        and not has_import(transformed, "cython")
     ):
         transformed.body.insert(0, ast.Import(names=[ast.alias(name="cython", asname=None)]))
     ast.fix_missing_locations(transformed)

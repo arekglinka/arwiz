@@ -1,6 +1,8 @@
 import ast
 import warnings
 
+from .._shared import apply_transformer
+
 _UNHASHABLE_HINTS = {"dict", "list", "set", "frozenset", "DataFrame"}
 
 
@@ -70,29 +72,12 @@ class _CachingAdder(ast.NodeTransformer):
         return node
 
 
-def _has_functools_import(tree: ast.Module) -> bool:
-    for stmt in tree.body:
-        if isinstance(stmt, ast.Import):
-            for alias in stmt.names:
-                if alias.name == "functools":
-                    return True
-        if isinstance(stmt, ast.ImportFrom) and stmt.module == "functools":
-            return True
-    return False
-
-
 def apply_add_caching(source_code: str) -> str:
-    tree = ast.parse(source_code)
-    transformer = _CachingAdder()
-    transformed = transformer.visit(tree)
-    if (
-        transformer.modified
-        and isinstance(transformed, ast.Module)
-        and not _has_functools_import(transformed)
-    ):
-        transformed.body.insert(0, ast.Import(names=[ast.alias(name="functools", asname=None)]))
-    ast.fix_missing_locations(transformed)
-    return ast.unparse(transformed)
+    return apply_transformer(
+        source_code,
+        _CachingAdder(),
+        import_to_add="functools",
+    )
 
 
 add_caching = apply_add_caching

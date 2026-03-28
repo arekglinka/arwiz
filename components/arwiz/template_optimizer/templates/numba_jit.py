@@ -1,5 +1,7 @@
 import ast
 
+from .._shared import has_import
+
 
 def _is_numba_jit_decorator(decorator: ast.expr) -> bool:
     if isinstance(decorator, ast.Attribute) and isinstance(decorator.value, ast.Name):
@@ -40,25 +42,17 @@ class _NumbaJITAdder(ast.NodeTransformer):
         return node
 
 
-def _has_numba_import(tree: ast.Module) -> bool:
-    for stmt in tree.body:
-        if isinstance(stmt, ast.Import):
-            for alias in stmt.names:
-                if alias.name == "numba":
-                    return True
-        if isinstance(stmt, ast.ImportFrom) and stmt.module == "numba":
-            return True
-    return False
-
-
 def apply_numba_jit(source_code: str) -> str:
-    tree = ast.parse(source_code)
+    try:
+        tree = ast.parse(source_code)
+    except (SyntaxError, ValueError):
+        return source_code
     transformer = _NumbaJITAdder()
     transformed = transformer.visit(tree)
     if (
         transformer.modified
         and isinstance(transformed, ast.Module)
-        and not _has_numba_import(transformed)
+        and not has_import(transformed, "numba")
     ):
         transformed.body.insert(0, ast.Import(names=[ast.alias(name="numba", asname=None)]))
     ast.fix_missing_locations(transformed)
@@ -253,7 +247,10 @@ class _NumbaParallelTransformer(ast.NodeTransformer):
 
 
 def has_parallel_safe_loop(source_code: str) -> bool:
-    tree = ast.parse(source_code)
+    try:
+        tree = ast.parse(source_code)
+    except (SyntaxError, ValueError):
+        return False
     for node in ast.walk(tree):
         if (
             isinstance(node, ast.For)
@@ -267,13 +264,16 @@ def has_parallel_safe_loop(source_code: str) -> bool:
 
 
 def apply_numba_parallel(source_code: str) -> str:
-    tree = ast.parse(source_code)
+    try:
+        tree = ast.parse(source_code)
+    except (SyntaxError, ValueError):
+        return source_code
     transformer = _NumbaParallelTransformer()
     transformed = transformer.visit(tree)
     if (
         transformer.modified
         and isinstance(transformed, ast.Module)
-        and not _has_numba_import(transformed)
+        and not has_import(transformed, "numba")
     ):
         transformed.body.insert(0, ast.Import(names=[ast.alias(name="numba", asname=None)]))
     ast.fix_missing_locations(transformed)

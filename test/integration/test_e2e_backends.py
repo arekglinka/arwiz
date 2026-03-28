@@ -7,6 +7,13 @@ from uuid import uuid4
 
 import pytest
 
+from test.conftest import (
+    DummyConfigLoader,
+    DummyHotspotDetector,
+    DummyProfiler,
+    SequenceEquivalenceChecker,
+)
+
 
 def _foundation() -> Any:
     return import_module("arwiz.foundation")
@@ -40,27 +47,6 @@ def _hotspot(function_name: str, script_path: Path) -> Any:
         self_time_ms=95.0,
         call_count=30,
     )
-
-
-class DummyConfigLoader:
-    def load_config(self, _config_path=None):  # noqa: ANN001
-        return _foundation().ArwizConfig()
-
-
-class DummyProfiler:
-    def profile_script(self, script_path, args=None, config=None):  # noqa: ANN001
-        duration_ms = 10.0 + (0.0 * len(args or []))
-        if config is not None:
-            duration_ms += 0.0
-        return _foundation().ProfileResult(script_path=str(script_path), duration_ms=duration_ms)
-
-
-class DummyHotspotDetector:
-    def __init__(self, hotspots: list[Any]) -> None:
-        self._hotspots = hotspots
-
-    def detect_hotspots(self, _profile_result, _threshold_pct=5.0):  # noqa: ANN001
-        return list(self._hotspots)
 
 
 class StaticBackendSelector:
@@ -164,14 +150,7 @@ def _build_orchestrator(
 
 
 def _set_equivalence_sequence(orchestrator: Any, outcomes: list[tuple[bool, str]]) -> None:
-    sequence = list(outcomes)
-
-    def _check_equivalence(*args: object, **kwargs: object) -> tuple[bool, str]:  # noqa: ARG001
-        if sequence:
-            return sequence.pop(0)
-        return True, ""
-
-    orchestrator._check_equivalence = _check_equivalence  # noqa: SLF001
+    orchestrator._check_equivalence = SequenceEquivalenceChecker(outcomes).check_equivalence  # noqa: SLF001
 
 
 @pytest.mark.integration
@@ -250,7 +229,8 @@ class TestE2EBackends:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         source = (
-            "import numpy as np\n\ndef target(x):\n    arr = np.array(x)\n    return np.sum(arr)\n"
+            "import numpy as np\n\ndef target(x):\n"
+            "    arr = np.array(x)\n    y = process(arr)\n    return y\n"
         )
         script = _write_script(tmp_path, source)
         selector = _backend_selector_cls()()
@@ -284,12 +264,11 @@ class TestE2EBackends:
         script = _write_script(tmp_path, source)
         selector = _backend_selector_cls()()
 
-        llm_optimizer = _llm_optimizer_cls()()
+        llm_optimizer = _llm_optimizer_cls()(
+            backend_manifest=import_module("arwiz.backend_selector.manifest").BackendManifest()
+        )
         provider = _MockProvider()
         llm_optimizer.provider = provider
-        llm_optimizer.backend_manifest = import_module(
-            "arwiz.backend_selector.manifest"
-        ).BackendManifest()
 
         template_optimizer = MappingTemplateOptimizer(templates=["numba_jit"])
         orchestrator = _build_orchestrator(
@@ -309,15 +288,48 @@ class TestE2EBackends:
         assert provider.prompts
         assert "Backend selection context" in provider.prompts[-1]
 
-    def test_specific_strategy_cython_bypasses_selector(self, tmp_path: Path) -> None:
-        source = "def target(x):\n    return x + 1\n"
+    @pytest.mark.parametrize(
+        "strategy, source, template, output, expected_backend, expected_template",
+        [
+            pytest.param(
+                "cython",
+                "def target(x):\n    return x + 1\n",
+                "cython_optimize",
+                "def target(x):\n    return x + 2\n",
+                "cython",
+                "cython_optimize",
+                id="cython",
+            ),
+            pytest.param(
+                "jax",
+                "def target(x):\n    return x\n",
+                "jax_optimize",
+                "def target(x):\n    return x\n",
+                "jax",
+                "jax_optimize",
+                id="jax",
+            ),
+            pytest.param(
+                "pyo3",
+                "def target(text):\n    return text.upper()\n",
+                "pyo3_optimize",
+                "def target(text):\n    return text\n",
+                "pyo3",
+                "pyo3_optimize",
+                id="pyo3",
+            ),
+        ],
+    )
+    def test_specific_strategy_bypasses_selector(
+        self, tmp_path, strategy, source, template, output, expected_backend, expected_template
+    ):
         script = _write_script(tmp_path, source)
         selector = StaticBackendSelector(fail_on_select=True)
         template_optimizer = MappingTemplateOptimizer(
-            templates=["cython_optimize"],
-            outputs={"cython_optimize": "def target(x):\n    return x + 2\n"},
+            templates=[template],
+            outputs={template: output},
         )
-        llm_optimizer = TrackingLlmOptimizer("def target(x):\n    return x + 3\n")
+        llm_optimizer = TrackingLlmOptimizer(output)
         orchestrator = _build_orchestrator(
             script,
             template_optimizer=template_optimizer,
@@ -327,66 +339,12 @@ class TestE2EBackends:
         _set_equivalence_sequence(orchestrator, [(True, "")])
 
         result = orchestrator.run_profile_optimize_pipeline(
-            script_path=str(script), function_name="target", strategy="cython"
+            script_path=str(script), function_name="target", strategy=strategy
         )
 
         assert result.best_attempt is not None
-        assert result.best_attempt.backend == "cython"
-        assert result.best_attempt.template_name == "cython_optimize"
-        assert selector.select_called is False
-        assert llm_optimizer.called is False
-
-    def test_specific_strategy_jax_bypasses_selector(self, tmp_path: Path) -> None:
-        source = "def target(x):\n    return x\n"
-        script = _write_script(tmp_path, source)
-        selector = StaticBackendSelector(fail_on_select=True)
-        template_optimizer = MappingTemplateOptimizer(
-            templates=["jax_optimize"],
-            outputs={"jax_optimize": "def target(x):\n    return x\n"},
-        )
-        llm_optimizer = TrackingLlmOptimizer("def target(x):\n    return x\n")
-        orchestrator = _build_orchestrator(
-            script,
-            template_optimizer=template_optimizer,
-            llm_optimizer=llm_optimizer,
-            backend_selector=selector,
-        )
-        _set_equivalence_sequence(orchestrator, [(True, "")])
-
-        result = orchestrator.run_profile_optimize_pipeline(
-            script_path=str(script), function_name="target", strategy="jax"
-        )
-
-        assert result.best_attempt is not None
-        assert result.best_attempt.backend == "jax"
-        assert result.best_attempt.template_name == "jax_optimize"
-        assert selector.select_called is False
-        assert llm_optimizer.called is False
-
-    def test_specific_strategy_pyo3_bypasses_selector(self, tmp_path: Path) -> None:
-        source = "def target(text):\n    return text.upper()\n"
-        script = _write_script(tmp_path, source)
-        selector = StaticBackendSelector(fail_on_select=True)
-        template_optimizer = MappingTemplateOptimizer(
-            templates=["pyo3_optimize"],
-            outputs={"pyo3_optimize": "def target(text):\n    return text\n"},
-        )
-        llm_optimizer = TrackingLlmOptimizer("def target(text):\n    return text\n")
-        orchestrator = _build_orchestrator(
-            script,
-            template_optimizer=template_optimizer,
-            llm_optimizer=llm_optimizer,
-            backend_selector=selector,
-        )
-        _set_equivalence_sequence(orchestrator, [(True, "")])
-
-        result = orchestrator.run_profile_optimize_pipeline(
-            script_path=str(script), function_name="target", strategy="pyo3"
-        )
-
-        assert result.best_attempt is not None
-        assert result.best_attempt.backend == "pyo3"
-        assert result.best_attempt.template_name == "pyo3_optimize"
+        assert result.best_attempt.backend == expected_backend
+        assert result.best_attempt.template_name == expected_template
         assert selector.select_called is False
         assert llm_optimizer.called is False
 

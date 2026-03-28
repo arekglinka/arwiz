@@ -68,7 +68,10 @@ class _BatchIOTransformer(ast.NodeTransformer):
 
 
 def apply_batch_io(source_code: str) -> str:
-    tree = ast.parse(source_code)
+    try:
+        tree = ast.parse(source_code)
+    except (SyntaxError, ValueError):
+        return source_code
     transformed = _BatchIOTransformer().visit(tree)
     ast.fix_missing_locations(transformed)
     return ast.unparse(transformed)

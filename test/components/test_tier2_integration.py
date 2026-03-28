@@ -36,9 +36,7 @@ def test_selector_to_orchestrator_jax_pipeline_mock(monkeypatch: pytest.MonkeyPa
     selector = selector_mod.DefaultBackendSelector()
     monkeypatch.setattr(selector, "is_backend_available", lambda name: name == "jax")
 
-    source = (
-        "def f(a, n):\n    x = np.ones(n)\n    scale = max(1, n)\n    return np.sum(x) * scale\n"
-    )
+    source = "def f(a, b):\n    x = np.sum(a)\n    y = custom_op(b)\n    return x + y\n"
     selected = selector.select_backends(source, None)
     assert "jax" in selected
 
@@ -52,9 +50,7 @@ def test_selector_to_orchestrator_cupy_pipeline_mock(monkeypatch: pytest.MonkeyP
     selector = selector_mod.DefaultBackendSelector()
     monkeypatch.setattr(selector, "is_backend_available", lambda name: name == "cupy")
 
-    source = (
-        "def f(a, n):\n    x = np.ones(n)\n    scale = max(1, n)\n    return np.sum(x) * scale\n"
-    )
+    source = "def f(a, b):\n    x = np.sum(a)\n    y = custom_op(b)\n    return x + y\n"
     selected = selector.select_backends(source, None)
     assert "cupy" in selected
 

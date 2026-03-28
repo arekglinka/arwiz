@@ -1,15 +1,15 @@
 import ast
 
 
-def detect_for_loops(source: str) -> list[ast.For]:
-    tree = ast.parse(source)
-    return [node for node in ast.walk(tree) if isinstance(node, ast.For)]
+def detect_for_loops(source: str, tree: ast.Module | None = None) -> list[ast.For]:
+    t = tree if tree is not None else ast.parse(source)
+    return [node for node in ast.walk(t) if isinstance(node, ast.For)]
 
 
-def detect_pandas_operations(source: str) -> list[ast.Call]:
-    tree = ast.parse(source)
+def detect_pandas_operations(source: str, tree: ast.Module | None = None) -> list[ast.Call]:
+    t = tree if tree is not None else ast.parse(source)
     matches: list[ast.Call] = []
-    for node in ast.walk(tree):
+    for node in ast.walk(t):
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
             continue
         if node.func.attr in {"apply", "iterrows"}:
@@ -17,10 +17,10 @@ def detect_pandas_operations(source: str) -> list[ast.Call]:
     return matches
 
 
-def detect_file_io_operations(source: str) -> list[ast.Call]:
-    tree = ast.parse(source)
+def detect_file_io_operations(source: str, tree: ast.Module | None = None) -> list[ast.Call]:
+    t = tree if tree is not None else ast.parse(source)
     matches: list[ast.Call] = []
-    for node in ast.walk(tree):
+    for node in ast.walk(t):
         if not isinstance(node, ast.For):
             continue
         for inner in ast.walk(node):
@@ -38,8 +38,8 @@ def detect_file_io_operations(source: str) -> list[ast.Call]:
     return matches
 
 
-def detect_data_types(source: str) -> dict[str, str]:
-    tree = ast.parse(source)
+def detect_data_types(source: str, tree: ast.Module | None = None) -> dict[str, str]:
+    t = tree if tree is not None else ast.parse(source)
     inferred: dict[str, str] = {}
 
     annotation_map = {
@@ -92,7 +92,7 @@ def detect_data_types(source: str) -> dict[str, str]:
             return "ndarray"
         return None
 
-    for node in ast.walk(tree):
+    for node in ast.walk(t):
         if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
             annotated = _annotation_to_type(node.annotation)
             if annotated is not None:
@@ -113,8 +113,8 @@ def detect_data_types(source: str) -> dict[str, str]:
     return inferred
 
 
-def detect_array_operations(source: str) -> list[ast.Call]:
-    tree = ast.parse(source)
+def detect_array_operations(source: str, tree: ast.Module | None = None) -> list[ast.Call]:
+    t = tree if tree is not None else ast.parse(source)
     matches: list[ast.Call] = []
 
     operations = {
@@ -146,7 +146,7 @@ def detect_array_operations(source: str) -> list[ast.Call]:
         "empty_like",
     }
 
-    for node in ast.walk(tree):
+    for node in ast.walk(t):
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
             continue
         if node.func.attr not in operations:
@@ -157,11 +157,13 @@ def detect_array_operations(source: str) -> list[ast.Call]:
     return matches
 
 
-def detect_control_flow_complexity(source: str) -> dict[str, int | bool]:
-    tree = ast.parse(source)
+def detect_control_flow_complexity(
+    source: str, tree: ast.Module | None = None
+) -> dict[str, int | bool]:
+    t = tree if tree is not None else ast.parse(source)
     loop_count = 0
 
-    for node in ast.walk(tree):
+    for node in ast.walk(t):
         if isinstance(node, (ast.For, ast.While)):
             loop_count += 1
 
@@ -191,7 +193,7 @@ def detect_control_flow_complexity(source: str) -> dict[str, int | bool]:
 
         return max_depth, branch_count
 
-    nesting_depth, branch_count_in_loops = _walk_with_context(tree)
+    nesting_depth, branch_count_in_loops = _walk_with_context(t)
 
     return {
         "loop_count": loop_count,
@@ -201,8 +203,8 @@ def detect_control_flow_complexity(source: str) -> dict[str, int | bool]:
     }
 
 
-def detect_string_operations(source: str) -> list[ast.Call]:
-    tree = ast.parse(source)
+def detect_string_operations(source: str, tree: ast.Module | None = None) -> list[ast.Call]:
+    t = tree if tree is not None else ast.parse(source)
     matches: list[ast.Call] = []
 
     methods = {
@@ -226,7 +228,7 @@ def detect_string_operations(source: str) -> list[ast.Call]:
         "rfind",
     }
 
-    for node in ast.walk(tree):
+    for node in ast.walk(t):
         if not isinstance(node, ast.Call):
             continue
         if isinstance(node.func, ast.Attribute) and node.func.attr in methods:
@@ -238,13 +240,13 @@ def detect_string_operations(source: str) -> list[ast.Call]:
     return matches
 
 
-def detect_memory_access_patterns(source: str) -> list[str]:
-    tree = ast.parse(source)
+def detect_memory_access_patterns(source: str, tree: ast.Module | None = None) -> list[str]:
+    t = tree if tree is not None else ast.parse(source)
     patterns: list[str] = []
 
     sequential_names = {"i", "j", "k", "idx", "index", "n"}
 
-    for node in ast.walk(tree):
+    for node in ast.walk(t):
         if not isinstance(node, ast.Subscript):
             continue
 

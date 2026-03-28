@@ -1,3 +1,4 @@
+import ast
 from collections.abc import Callable
 
 from ..foundation import HotSpot
@@ -57,8 +58,13 @@ class DefaultTemplateOptimizer:
         source_code: str,
         hotspot: HotSpot | None = None,
     ) -> list[str]:
+        try:
+            tree = ast.parse(source_code)
+        except (SyntaxError, ValueError):
+            return []
+
         detected: list[str] = []
-        loops = detect_for_loops(source_code)
+        loops = detect_for_loops(source_code, tree=tree)
         has_array_indexing = "[" in source_code and "]" in source_code
         has_arithmetic = any(op in source_code for op in ["+", "-", "*", "/", "**"])
         if loops:
@@ -71,11 +77,11 @@ class DefaultTemplateOptimizer:
             if has_array_indexing and has_arithmetic:
                 detected.append("numexpr_optimize")
                 detected.append("cffi_optimize")
-        if detect_file_io_operations(source_code):
+        if detect_file_io_operations(source_code, tree=tree):
             detected.append("batch_io")
-        if detect_pandas_operations(source_code) and "vectorize_loop" not in detected:
+        if detect_pandas_operations(source_code, tree=tree) and "vectorize_loop" not in detected:
             detected.append("vectorize_loop")
-        if detect_string_operations(source_code):
+        if detect_string_operations(source_code, tree=tree):
             detected.append("pyo3_optimize")
 
         if "import numpy as np" in source_code and "np." in source_code:

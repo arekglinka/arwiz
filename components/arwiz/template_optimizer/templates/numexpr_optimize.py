@@ -1,15 +1,6 @@
 import ast
 
-
-def _has_numexpr_import(tree: ast.Module) -> bool:
-    for stmt in tree.body:
-        if isinstance(stmt, ast.Import):
-            for alias in stmt.names:
-                if alias.name == "numexpr":
-                    return True
-        if isinstance(stmt, ast.ImportFrom) and stmt.module == "numexpr":
-            return True
-    return False
+from .._shared import apply_transformer
 
 
 def _is_arithmetic_expr(node: ast.AST) -> bool:
@@ -98,14 +89,8 @@ class _NumExprTransformer(ast.NodeTransformer):
 
 
 def apply_numexpr_optimize(source_code: str) -> str:
-    tree = ast.parse(source_code)
-    transformer = _NumExprTransformer()
-    transformed = transformer.visit(tree)
-    if (
-        transformer.modified
-        and isinstance(transformed, ast.Module)
-        and not _has_numexpr_import(transformed)
-    ):
-        transformed.body.insert(0, ast.Import(names=[ast.alias(name="numexpr", asname=None)]))
-    ast.fix_missing_locations(transformed)
-    return ast.unparse(transformed)
+    return apply_transformer(
+        source_code,
+        _NumExprTransformer(),
+        import_to_add="numexpr",
+    )

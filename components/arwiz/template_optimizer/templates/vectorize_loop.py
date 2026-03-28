@@ -1,5 +1,7 @@
 import ast
 
+from .._shared import has_import
+
 
 class _LoopVectorizer(ast.NodeTransformer):
     def __init__(self, numpy_name: str) -> None:
@@ -101,10 +103,6 @@ class _LoopVectorizer(ast.NodeTransformer):
         return node
 
 
-def _has_numpy_import(module: ast.Module) -> bool:
-    return _get_numpy_namespace_name(module) is not None
-
-
 def _get_numpy_namespace_name(module: ast.Module) -> str | None:
     for statement in module.body:
         if isinstance(statement, ast.Import):
@@ -115,7 +113,11 @@ def _get_numpy_namespace_name(module: ast.Module) -> str | None:
 
 
 def apply_vectorize_loop(source_code: str) -> str:
-    tree = ast.parse(source_code)
+    try:
+        tree = ast.parse(source_code)
+    except (SyntaxError, ValueError):
+        return source_code
+
     if not isinstance(tree, ast.Module):
         return source_code
 
@@ -125,7 +127,7 @@ def apply_vectorize_loop(source_code: str) -> str:
     if (
         transformer.needs_numpy
         and isinstance(transformed, ast.Module)
-        and not _has_numpy_import(transformed)
+        and not has_import(transformed, "numpy")
     ):
         transformed.body.insert(0, ast.Import(names=[ast.alias(name="numpy", asname="np")]))
     ast.fix_missing_locations(transformed)

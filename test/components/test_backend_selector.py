@@ -174,34 +174,12 @@ def test_select_backends_recommends_jax_cupy_for_array_ops_without_loops(
     selector = mod.DefaultBackendSelector()
     monkeypatch.setattr(selector, "is_backend_available", lambda name: True)
 
-    source = (
-        "def f(a, n):\n    x = np.ones(n)\n    scale = max(1, n)\n    return np.sum(x) * scale\n"
-    )
+    source = "def f(a, b):\n    x = np.sum(a)\n    y = custom_transform(b)\n    return x + y\n"
     ranked = selector.rank_backends(source, None)
     ranked_names = [name for name, _ in ranked]
 
     assert "jax" in ranked_names
     assert "cupy" in ranked_names
-
-
-def test_select_backends_recommends_numexpr_for_arithmetic_in_loops(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    mod = _import("arwiz.backend_selector.core")
-    selector = mod.DefaultBackendSelector()
-    monkeypatch.setattr(selector, "is_backend_available", lambda name: True)
-
-    source = (
-        "def f(data, n):\n"
-        "    result = [0] * n\n"
-        "    for i in range(n):\n"
-        "        result[i] = data[i] * 2 + data[i] ** 2\n"
-        "    return result\n"
-    )
-    ranked = selector.rank_backends(source, None)
-    ranked_names = [name for name, _ in ranked]
-
-    assert "numexpr" in ranked_names
 
 
 def test_rank_backends_numexpr_confidence_in_range(
@@ -232,9 +210,7 @@ def test_select_backends_jax_cupy_filtered_when_unavailable(
     selector = mod.DefaultBackendSelector()
     monkeypatch.setattr(selector, "is_backend_available", lambda name: name not in {"jax", "cupy"})
 
-    source = (
-        "def f(a, n):\n    x = np.ones(n)\n    scale = max(1, n)\n    return np.sum(x) * scale\n"
-    )
+    source = "def f(a, b):\n    x = np.sum(a)\n    y = custom_transform(b)\n    return x + y\n"
     selected = selector.select_backends(source, None)
 
     assert "jax" not in selected
@@ -279,3 +255,61 @@ def test_taichi_always_reports_unavailable() -> None:
     selector = mod.DefaultBackendSelector()
 
     assert selector.is_backend_available("taichi") is False
+
+
+def test_pure_numpy_vectorized_with_safe_builtins_returns_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod = _import("arwiz.backend_selector.core")
+    selector = mod.DefaultBackendSelector()
+    monkeypatch.setattr(selector, "is_backend_available", lambda name: True)
+
+    source = (
+        "def f(a, b):\n"
+        "    x = np.array(a)\n"
+        "    y = np.zeros(len(b))\n"
+        "    s = int(np.sum(x))\n"
+        "    print(s)\n"
+        "    return s\n"
+    )
+    assert selector.select_backends(source, None) == []
+
+
+def test_loops_with_array_ops_no_strings_returns_backends(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod = _import("arwiz.backend_selector.core")
+    selector = mod.DefaultBackendSelector()
+    monkeypatch.setattr(selector, "is_backend_available", lambda name: True)
+
+    source = (
+        "def f(data, n):\n"
+        "    result = np.zeros(n)\n"
+        "    for i in range(n):\n"
+        "        result[i] = np.sqrt(data[i])\n"
+        "    return result\n"
+    )
+    ranked = selector.rank_backends(source, None)
+    ranked_names = [name for name, _ in ranked]
+    assert len(ranked_names) > 0
+    assert "numba" in ranked_names
+
+
+def test_parallel_safe_loops_recommends_numba_parallel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod = _import("arwiz.backend_selector.core")
+    selector = mod.DefaultBackendSelector()
+    monkeypatch.setattr(selector, "is_backend_available", lambda name: True)
+
+    source = (
+        "def f(data, n):\n"
+        "    result = np.zeros(n)\n"
+        "    for i in range(n):\n"
+        "        result[i] = data[i] * 2.0\n"
+        "    return result\n"
+    )
+    ranked = selector.rank_backends(source, None)
+    ranked_map = dict(ranked)
+    assert "numba_parallel" in ranked_map
+    assert ranked_map["numba_parallel"] == 0.75

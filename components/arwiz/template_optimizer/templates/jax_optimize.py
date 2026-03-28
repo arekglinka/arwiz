@@ -1,5 +1,7 @@
 import ast
 
+from .._shared import apply_transformer
+
 
 def _is_jax_jit_decorator(decorator: ast.expr) -> bool:
     if isinstance(decorator, ast.Attribute) and isinstance(decorator.value, ast.Name):
@@ -13,17 +15,6 @@ def _is_jax_jit_decorator(decorator: ast.expr) -> bool:
 
     deco_text = ast.unparse(decorator)
     return "jax.jit" in deco_text or deco_text == "jit" or deco_text.endswith(".jit")
-
-
-def _has_jax_import(tree: ast.Module) -> bool:
-    for stmt in tree.body:
-        if isinstance(stmt, ast.Import):
-            for alias in stmt.names:
-                if alias.name == "jax":
-                    return True
-        if isinstance(stmt, ast.ImportFrom) and stmt.module == "jax":
-            return True
-    return False
 
 
 class _JaxTransformer(ast.NodeTransformer):
@@ -80,14 +71,8 @@ class _JaxTransformer(ast.NodeTransformer):
 
 
 def apply_jax_optimize(source_code: str) -> str:
-    tree = ast.parse(source_code)
-    transformer = _JaxTransformer()
-    transformed = transformer.visit(tree)
-    if (
-        transformer.modified
-        and isinstance(transformed, ast.Module)
-        and not _has_jax_import(transformed)
-    ):
-        transformed.body.insert(0, ast.Import(names=[ast.alias(name="jax", asname=None)]))
-    ast.fix_missing_locations(transformed)
-    return ast.unparse(transformed)
+    return apply_transformer(
+        source_code,
+        _JaxTransformer(),
+        import_to_add="jax",
+    )

@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import uuid4
 
 import httpx
@@ -22,8 +23,13 @@ from .providers import get_provider
 
 
 class DefaultLLMOptimizer:
-    def __init__(self, config: LLMConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: LLMConfig | None = None,
+        backend_manifest: Any | None = None,
+    ) -> None:
         self.config = config or LLMConfig()
+        self.backend_manifest = backend_manifest
 
     def optimize_function(
         self,
@@ -103,7 +109,7 @@ class DefaultLLMOptimizer:
             auto_manifest_fallback = heuristic_confidence < 0.5
 
             if auto_manifest_fallback and not backend_manifest_context:
-                backend_manifest_provider = getattr(self, "backend_manifest", None)
+                backend_manifest_provider = self.backend_manifest
                 if backend_manifest_provider is not None:
                     all_backends = backend_manifest_provider.all_backends()
                     backend_manifest_context = build_manifest_context(all_backends)

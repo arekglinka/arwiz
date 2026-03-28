@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import logging
 from importlib import import_module
 from inspect import Parameter, Signature, signature
 from pathlib import Path
@@ -27,6 +28,8 @@ from .pipeline_state import PipelineState
 
 # given polylith brick mapping metadata,
 # when syncing brick coordinates, then "components/arwiz/orchestrator" = "arwiz/orchestrator"
+
+logger = logging.getLogger(__name__)
 
 
 class DefaultOrchestrator:
@@ -125,7 +128,8 @@ class DefaultOrchestrator:
         backend_ranking: list[tuple[str, float]] = []
         try:
             backend_ranking = self._backend_selector.rank_backends(original_source, target_hotspot)
-        except Exception:
+        except Exception as exc:
+            logger.warning("Backend ranking failed: %s", exc)
             backend_ranking = []
         state.backend_ranking = backend_ranking
 
@@ -166,19 +170,21 @@ class DefaultOrchestrator:
                     "select_backends",
                     lambda: self._backend_selector.select_backends(original_source, target_hotspot),
                 )
-            except Exception:
+            except Exception as exc:
+                logger.warning("Backend selection failed: %s", exc)
                 selected_backends = []
+
+            available_templates = self._run_step(
+                state,
+                "list_templates",
+                self._template_optimizer.list_templates,
+            )
 
             for backend_name in selected_backends:
                 template_name = self._BACKEND_TEMPLATE_MAP.get(backend_name)
                 if not template_name:
                     continue
 
-                available_templates = self._run_step(
-                    state,
-                    "list_templates",
-                    self._template_optimizer.list_templates,
-                )
                 if template_name not in available_templates:
                     continue
 

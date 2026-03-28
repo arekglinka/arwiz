@@ -1,3 +1,4 @@
+import ast
 from importlib import import_module
 from typing import Any
 
@@ -13,6 +14,8 @@ class DefaultBackendSelector:
         self._detect_control_flow_complexity = pattern_detection.detect_control_flow_complexity
         self._detect_string_operations = pattern_detection.detect_string_operations
         self._detect_memory_access_patterns = pattern_detection.detect_memory_access_patterns
+        numba_jit_mod = import_module("arwiz.template_optimizer.templates.numba_jit")
+        self._has_parallel_safe_loop = numba_jit_mod.has_parallel_safe_loop
 
     def _is_pure_numpy_vectorized(
         self,
@@ -23,9 +26,8 @@ class DefaultBackendSelector:
         if has_loops or not has_array_ops:
             return False
 
-        ast_mod = import_module("ast")
-        tree = ast_mod.parse(source_code)
-        vectorized_only_ops = {
+        tree = ast.parse(source_code)
+        vectorized_ops = {
             "dot",
             "sum",
             "mean",
@@ -45,21 +47,63 @@ class DefaultBackendSelector:
             "cross",
         }
 
-        calls = [node for node in ast_mod.walk(tree) if isinstance(node, ast_mod.Call)]
+        numpy_constructors = {
+            "array",
+            "zeros",
+            "ones",
+            "arange",
+            "linspace",
+            "full",
+            "empty",
+            "where",
+            "clip",
+            "astype",
+            "conj",
+            "real",
+            "imag",
+        }
+
+        safe_builtins = {
+            "len",
+            "print",
+            "range",
+            "int",
+            "float",
+            "enumerate",
+            "zip",
+            "list",
+            "dict",
+            "set",
+            "tuple",
+            "str",
+            "bool",
+            "any",
+            "all",
+            "round",
+            "abs",
+            "pow",
+            "max",
+            "min",
+            "isinstance",
+            "type",
+            "repr",
+        }
+
+        calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)]
         if not calls:
             return False
 
         for call in calls:
             func = call.func
-            if isinstance(func, ast_mod.Attribute):
+            if isinstance(func, ast.Attribute):
                 if (
-                    isinstance(func.value, ast_mod.Name)
+                    isinstance(func.value, ast.Name)
                     and func.value.id in {"np", "numpy"}
-                    and func.attr in vectorized_only_ops
+                    and func.attr in (vectorized_ops | numpy_constructors)
                 ):
                     continue
                 return False
-            if isinstance(func, ast_mod.Name) and func.id in {"len"}:
+            if isinstance(func, ast.Name) and func.id in safe_builtins:
                 continue
             return False
         return True
@@ -68,9 +112,6 @@ class DefaultBackendSelector:
         has_loops = bool(self._detect_for_loops(source_code))
         has_array_ops = bool(self._detect_array_operations(source_code))
         has_string_ops = bool(self._detect_string_operations(source_code))
-
-        if not has_string_ops and has_loops and has_array_ops:
-            return []
 
         if not has_string_ops and self._is_pure_numpy_vectorized(
             source_code, has_loops, has_array_ops
@@ -93,6 +134,9 @@ class DefaultBackendSelector:
         control_flow = self._detect_control_flow_complexity(source_code)
         if bool(control_flow.get("has_nested_loops")):
             _recommend(["cython", "numba"], 0.7)
+
+        if has_loops and self._has_parallel_safe_loop(source_code):
+            _recommend(["numba_parallel"], 0.75)
 
         if has_array_ops and not has_loops:
             _recommend(["jax", "cupy"], 0.6)
@@ -119,11 +163,12 @@ class DefaultBackendSelector:
             "pyo3": 0,
             "cython": 1,
             "numba": 2,
-            "jax": 3,
-            "cupy": 4,
-            "numexpr": 5,
-            "cffi": 6,
-            "taichi": 7,
+            "numba_parallel": 3,
+            "jax": 4,
+            "cupy": 5,
+            "numexpr": 6,
+            "cffi": 7,
+            "taichi": 8,
         }
 
         ranked = sorted(
