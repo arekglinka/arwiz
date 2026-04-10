@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from importlib import import_module
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPONENTS_DIR = ROOT / "components"
@@ -24,11 +25,28 @@ DefaultOrchestrator = orchestrator_module.DefaultOrchestrator
 PipelineState = pipeline_module.PipelineState
 PipelineStep = pipeline_module.PipelineStep
 
-from test.conftest import (  # noqa: E402
-    DummyConfigLoader,
-    DummyHotspotDetector,
-    SequenceEquivalenceChecker,
-)
+
+class DummyConfigLoader:
+    def load_config(self, _config_path=None):  # noqa: ANN001
+        return ArwizConfig()
+
+
+class DummyHotspotDetector:
+    def __init__(self, hotspots: list[Any]) -> None:
+        self.hotspots = hotspots
+
+    def detect_hotspots(self, _profile_result, _threshold_pct=5.0):  # noqa: ANN001
+        return list(self.hotspots)
+
+
+class SequenceEquivalenceChecker:
+    def __init__(self, outcomes: list[tuple[bool, str]]) -> None:
+        self._outcomes = list(outcomes)
+
+    def check_equivalence(self, *args, **kwargs):  # noqa: ANN002, ANN003, ARG002
+        if self._outcomes:
+            return self._outcomes.pop(0)
+        return True, ""
 
 
 def _write_script(tmp_path: Path, source: str) -> Path:

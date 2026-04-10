@@ -36,11 +36,11 @@ def test_taichi_is_always_unavailable_with_reason() -> None:
 
     available, reason = manifest.check_availability("taichi")
     assert available is False
-    assert reason == "Taichi requires Python <=3.10, project uses Python 3.13+"
+    assert reason == "Taichi requires Python <=3.10, project uses Python 3.12+"
 
     taichi = manifest.get_backend("taichi")
     assert taichi.is_available is False
-    assert taichi.availability_reason == "Taichi requires Python <=3.10, project uses Python 3.13+"
+    assert taichi.availability_reason == "Taichi requires Python <=3.10, project uses Python 3.12+"
 
 
 def test_unknown_backend_returns_false_with_reason() -> None:
@@ -85,7 +85,7 @@ def test_all_backends_populates_availability_fields() -> None:
     assert all_backends["taichi"].is_available is False
     assert (
         all_backends["taichi"].availability_reason
-        == "Taichi requires Python <=3.10, project uses Python 3.13+"
+        == "Taichi requires Python <=3.10, project uses Python 3.12+"
     )
 
 

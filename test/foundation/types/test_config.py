@@ -31,7 +31,7 @@ class TestOptimizationStrategy:
 class TestArwizConfig:
     def test_defaults(self):
         cfg = ArwizConfig()
-        assert cfg.target_python == "3.13"
+        assert cfg.target_python == "3.12"
         assert cfg.memory_limit_mb is None
         assert cfg.timeout_seconds == 300
         assert cfg.speedup_threshold_percent == 50.0

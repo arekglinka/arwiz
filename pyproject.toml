@@ -2,7 +2,7 @@
 name = "arwiz"
 version = "0.1.0"
 description = "AI-assisted Python profiler/optimizer tool"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.0.0",
     "pandas>=2.0.0",
@@ -86,10 +86,10 @@ markers = [
 ]
 
 [tool.pyrefly]
-python_version = "3.13"
+python_version = "3.12"
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py312"
 line-length = 100
 indent-width = 4
 

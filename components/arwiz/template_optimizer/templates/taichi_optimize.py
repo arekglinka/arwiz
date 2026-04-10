@@ -1,6 +1,6 @@
 _TAICHI_UNAVAILABLE_COMMENT = (
     "# NOTE: Taichi optimization is unavailable — "
-    "Taichi requires Python <=3.10, but this project uses Python 3.13+.\n"
+    "Taichi requires Python <=3.10, but this project uses Python 3.12+.\n"
 )
 
 

@@ -553,7 +553,7 @@ def test_apply_taichi_optimize_returns_source_with_unavailability_comment() -> N
     )
     result = apply_taichi_optimize(source)
     assert "Taichi" in result
-    assert "Python 3.13" in result
+    assert "Python 3.12" in result
     assert "unavailable" in result.lower()
     assert "def compute(n):" in result
     assert "total += i" in result
@@ -573,7 +573,7 @@ def test_taichi_manifest_is_unavailable() -> None:
     manifest = import_module("arwiz.backend_selector.manifest").BackendManifest()
     available, reason = manifest.check_availability("taichi")
     assert available is False
-    assert "3.13" in reason or "3.10" in reason
+    assert "3.12" in reason or "3.10" in reason
 
 
 def test_taichi_not_detected_in_applicable_templates() -> None:
@@ -603,7 +603,7 @@ def test_build_taichi_prompt_mentions_unavailability() -> None:
     )
     prompt = build_taichi_prompt(source, hotspot)
     assert "Taichi" in prompt
-    assert "unavailable" in prompt.lower() or "3.10" in prompt or "3.13" in prompt
+    assert "unavailable" in prompt.lower() or "3.10" in prompt or "3.12" in prompt
 
 
 def test_generate_prompt_routes_taichi_with_unavailability_message() -> None:
@@ -619,7 +619,7 @@ def test_generate_prompt_routes_taichi_with_unavailability_message() -> None:
     )
     prompt = optimizer.generate_prompt(source, hotspot, strategy="taichi")
     assert "Taichi" in prompt
-    assert "unavailable" in prompt.lower() or "3.10" in prompt or "3.13" in prompt
+    assert "unavailable" in prompt.lower() or "3.10" in prompt or "3.12" in prompt
 
 
 def test_apply_cffi_optimize_numeric_loop_generates_cffi_bindings() -> None:

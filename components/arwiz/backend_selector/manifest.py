@@ -143,12 +143,16 @@ class BackendManifest:
                 name="taichi",
                 tier=3,
                 strengths=["GPU spatial computation", "physical simulation acceleration"],
-                limitations=["Python 3.13 incompatible", "GPU required", "limited language subset"],
+                limitations=[
+                    "Python 3.11+ incompatible",
+                    "GPU required",
+                    "limited language subset",
+                ],
                 ast_patterns=[],
                 best_for=["physical simulation", "spatial computation"],
                 performance_range=(10.0, 500.0),
                 is_available=False,
-                availability_reason="Taichi requires Python <=3.10, project uses Python 3.13+",
+                availability_reason="Taichi requires Python <=3.10, project uses Python 3.12+",
                 install_hint="pip install taichi (requires Python <=3.10)",
             ),
         }
@@ -163,7 +167,7 @@ class BackendManifest:
             return result
 
         if name == "taichi":
-            result = (False, "Taichi requires Python <=3.10, project uses Python 3.13+")
+            result = (False, "Taichi requires Python <=3.10, project uses Python 3.12+")
             self._availability_cache[name] = result
             return result
 

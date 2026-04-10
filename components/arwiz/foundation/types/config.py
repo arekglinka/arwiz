@@ -35,7 +35,7 @@ class LLMConfig(BaseModel):
 
 
 class ArwizConfig(BaseModel):
-    target_python: str = "3.13"
+    target_python: str = "3.12"
     memory_limit_mb: int | None = None
     timeout_seconds: int = 300
     speedup_threshold_percent: float = 50.0

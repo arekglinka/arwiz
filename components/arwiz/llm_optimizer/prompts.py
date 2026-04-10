@@ -119,7 +119,7 @@ def build_pyo3_prompt(source: str, hotspot: _HotSpotLike) -> str:
 def build_taichi_prompt(source: str, hotspot: _HotSpotLike) -> str:
     return (
         "Taichi GPU acceleration is unavailable on this system.\n"
-        "Taichi requires Python <=3.10, but this project uses Python 3.13+.\n"
+        "Taichi requires Python <=3.10, but this project uses Python 3.12+.\n"
         "Consider using CuPy or JAX for GPU acceleration instead.\n"
         + _base_context(source, hotspot)
     )

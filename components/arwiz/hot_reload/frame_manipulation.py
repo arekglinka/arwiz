@@ -1,4 +1,4 @@
-"""CPython 3.13 specific frame variable manipulation.
+"""CPython 3.12+ specific frame variable manipulation.
 
 WARNING: This is CPython-version-specific and fragile. Not guaranteed
 to work across Python versions or implementations. Uses internal CPython
