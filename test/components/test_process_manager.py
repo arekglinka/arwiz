@@ -138,3 +138,28 @@ class TestMemoryLimit:
         # On Linux with RLIMIT_AS, the process should be killed
         # On other systems, psutil monitoring should catch it
         assert result.exit_code != 0 or result.memory_exceeded is True
+
+    def test_run_command_successfully(self):
+        """Run an arbitrary command (not prefixed with sys.executable)."""
+        result = self.pm.run_command(["echo", "hello from command"])
+        assert result.exit_code == 0
+        assert "hello from command" in result.stdout
+        assert result.duration_ms > 0
+        assert result.pid is not None
+
+    def test_run_command_with_args(self):
+        """Run a command with additional arguments."""
+        result = self.pm.run_command(["echo", "foo", "bar", "baz"])
+        assert result.exit_code == 0
+        assert "foo bar baz" in result.stdout
+
+    def test_run_command_timeout(self):
+        """Run a long-running command with timeout, verify timed_out=True."""
+        result = self.pm.run_command(["sleep", "100"], timeout_seconds=2)
+        assert result.timed_out is True
+        assert result.exit_code != 0
+
+    def test_run_command_failure(self):
+        """Run a command that exits with error."""
+        result = self.pm.run_command(["false"])
+        assert result.exit_code != 0

@@ -141,7 +141,7 @@ class TestProfileCommand:
         mock_hotspot.detect_hotspots.return_value = []
         mock_hotspot_cls.return_value = mock_hotspot
 
-        result = runner.invoke(cli, ["profile", SIMPLE_LOOP, "--args", "foo bar"])
+        result = runner.invoke(cli, ["profile", SIMPLE_LOOP, "foo", "bar"])
 
         assert result.exit_code == 0
         call_args = mock_profiler.profile_script.call_args
@@ -149,7 +149,9 @@ class TestProfileCommand:
 
     def test_profile_missing_script(self, runner):
         result = runner.invoke(cli, ["profile", "/nonexistent/script.py"])
-        assert result.exit_code != 0
+        # With nargs=-1, the CLI proceeds but profiling fails gracefully
+        assert result.exit_code == 0
+        assert "nonexistent" in result.output or "error" in result.output.lower()
 
 
 class TestOptimizeCommand:
@@ -228,9 +230,31 @@ class TestOptimizeCommand:
         assert result.exit_code == 0
         assert "not found" in result.output
 
-    def test_optimize_requires_function(self, runner):
-        result = runner.invoke(cli, ["optimize", SIMPLE_LOOP])
-        assert result.exit_code != 0
+    @patch("arwiz.cli.commands.optimize_cmd.DefaultOrchestrator")
+    def test_optimize_without_function_warns(self, mock_orch_cls, runner):
+        mock_orch = MagicMock()
+        mock_orch.run_profile_optimize_pipeline.return_value = OptimizationResult(
+            function_name="pytest",
+            file_path="pytest",
+            attempts=[
+                OptimizationAttempt(
+                    attempt_id="opt_err",
+                    original_code="",
+                    optimized_code="",
+                    strategy="auto",
+                    error_message="Function extraction is only supported for Python scripts (.py files)",
+                )
+            ],
+            best_attempt=None,
+            applied=False,
+            total_time_saved_ms=0.0,
+        )
+        mock_orch_cls.return_value = mock_orch
+
+        result = runner.invoke(cli, ["optimize", "pytest"])
+
+        assert result.exit_code == 0
+        assert ".py" in result.output
 
 
 class TestCoverageCommand:
@@ -263,7 +287,7 @@ class TestCoverageCommand:
         mock_tracer.trace_branches.return_value = fake_branch_coverage
         mock_tracer_cls.return_value = mock_tracer
 
-        result = runner.invoke(cli, ["coverage", SIMPLE_LOOP, "--args", "x y"])
+        result = runner.invoke(cli, ["coverage", SIMPLE_LOOP, "x", "y"])
 
         assert result.exit_code == 0
         call_args = mock_tracer.trace_branches.call_args

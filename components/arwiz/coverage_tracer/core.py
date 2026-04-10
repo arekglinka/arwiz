@@ -57,6 +57,17 @@ class DefaultCoverageTracer(CoverageTracerProtocol):
         script_path = Path(script_path)
         start = time.perf_counter()
 
+        if script_path.suffix != ".py":
+            return BranchCoverage(
+                total_branches=0,
+                covered_branches=0,
+                coverage_percent=100.0,
+                uncovered_lines=[],
+                branch_details=[],
+                script_path=str(script_path),
+                duration_ms=0.0,
+            )
+
         static_branches = get_static_branches(script_path)
         wrapper_source = _TRACE_WRAPPER.format(target_path=str(script_path))
 

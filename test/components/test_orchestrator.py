@@ -624,3 +624,17 @@ def test_constructor_creates_default_backend_selector_when_not_provided() -> Non
     selector = orchestrator._backend_selector  # noqa: SLF001
     assert selector is not None
     assert selector.__class__.__name__ == "DefaultBackendSelector"
+
+
+def test_non_py_script_returns_error(tmp_path: Path) -> None:
+    """Non-.py targets should return an error OptimizationResult."""
+    orchestrator = DefaultOrchestrator(config_loader=DummyConfigLoader())
+    result = orchestrator.run_profile_optimize_pipeline(
+        script_path="pytest",
+        function_name=None,
+        strategy="template",
+    )
+    assert result.best_attempt is None
+    assert result.applied is False
+    assert len(result.attempts) == 1
+    assert ".py" in (result.attempts[0].error_message or "")

@@ -103,6 +103,26 @@ class DefaultOrchestrator:
             cfg = self._run_step(
                 state, "load_config", lambda: config or self._config_loader.load_config()
             )
+
+            if not script_path.endswith(".py"):
+                return OptimizationResult(
+                    function_name=function_name or script_path,
+                    file_path=script_path,
+                    attempts=[
+                        self._make_error_attempt(
+                            original_code="",
+                            strategy=strategy,
+                            error=(
+                                "Function extraction is only supported"
+                                " for Python scripts (.py files)"
+                            ),
+                        )
+                    ],
+                    best_attempt=None,
+                    applied=False,
+                    total_time_saved_ms=0.0,
+                )
+
             profile_result = self._run_step(
                 state,
                 "profile_script",

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import pstats
+import shutil
+import sys
 import tempfile
 import textwrap
 from pathlib import Path
@@ -29,8 +31,25 @@ class DefaultProfiler:
             timeout_seconds = 300
             memory_limit_mb = None
 
-        target_script = Path(script_path).resolve()
+        target = str(script_path)
         cli_args = args or []
+        is_python_file = target.endswith(".py")
+
+        if is_python_file:
+            return self._profile_python_script(
+                target, cli_args, cfg, timeout_seconds, memory_limit_mb
+            )
+        return self._profile_executable(target, cli_args, cfg, timeout_seconds, memory_limit_mb)
+
+    def _profile_python_script(
+        self,
+        target: str,
+        cli_args: list[str],
+        cfg: ProfilingConfig,
+        timeout_seconds: int,
+        memory_limit_mb: int | None,
+    ) -> ProfileResult:
+        target_script = Path(target).resolve()
 
         with tempfile.TemporaryDirectory(prefix="arwiz_prof_") as tmpdir:
             tmp_path = Path(tmpdir)
@@ -89,5 +108,57 @@ class DefaultProfiler:
 
             stats = pstats.Stats(str(stats_path))
             parsed = parse_pstats(stats, str(target_script))
+            parsed.duration_ms = max(process_result.duration_ms, parsed.duration_ms)
+            return parsed
+
+    def _profile_executable(
+        self,
+        target: str,
+        cli_args: list[str],
+        cfg: ProfilingConfig,
+        timeout_seconds: int,
+        memory_limit_mb: int | None,
+    ) -> ProfileResult:
+        resolved = shutil.which(target)
+        display_name = resolved or target
+
+        with tempfile.TemporaryDirectory(prefix="arwiz_prof_") as tmpdir:
+            tmp_path = Path(tmpdir)
+            stats_path = tmp_path / "profile.pstats"
+
+            cmd = [
+                sys.executable,
+                "-m",
+                "cProfile",
+                "-o",
+                str(stats_path),
+                "--",
+                target,
+                *cli_args,
+            ]
+
+            for _ in range(max(cfg.warmup_runs, 0)):
+                self._process_manager.run_command(
+                    cmd=cmd,
+                    timeout_seconds=timeout_seconds,
+                    memory_limit_mb=memory_limit_mb,
+                )
+
+            process_result = self._process_manager.run_command(
+                cmd=cmd,
+                timeout_seconds=timeout_seconds,
+                memory_limit_mb=memory_limit_mb,
+            )
+
+            if process_result.exit_code != 0 or not stats_path.exists():
+                return ProfileResult(
+                    script_path=display_name,
+                    duration_ms=max(process_result.duration_ms, 0.0),
+                    call_tree=None,
+                    hotspots=[],
+                )
+
+            stats = pstats.Stats(str(stats_path))
+            parsed = parse_pstats(stats, display_name)
             parsed.duration_ms = max(process_result.duration_ms, parsed.duration_ms)
             return parsed

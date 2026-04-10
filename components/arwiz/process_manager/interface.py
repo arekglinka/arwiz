@@ -20,6 +20,13 @@ class ProcessManagerProtocol(Protocol):
         memory_limit_mb: int | None = None,
     ) -> ProcessResult: ...
 
+    def run_command(
+        self,
+        cmd: list[str],
+        timeout_seconds: int = 300,
+        memory_limit_mb: int | None = None,
+    ) -> ProcessResult: ...
+
     def kill_process(self, pid: int) -> None: ...
 
     def get_memory_usage_mb(self, pid: int) -> float: ...

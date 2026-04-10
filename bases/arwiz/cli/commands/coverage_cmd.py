@@ -13,18 +13,18 @@ console = Console()
 
 
 @click.command("coverage")
-@click.argument("script", type=click.Path(exists=True))
-@click.option("--args", default="", help="Space-separated arguments for the script")
+@click.argument("command", nargs=-1, required=True)
 @click.option(
     "--store-inputs",
     is_flag=True,
     default=False,
     help="Store input snapshots for uncovered branches",
 )
-def coverage(script: str, args: str, store_inputs: bool) -> None:
+def coverage(command: tuple[str, ...], store_inputs: bool) -> None:
     """Trace branch coverage of a Python script."""
-    script_path = Path(script)
-    script_args = args.split() if args else []
+    target = command[0]
+    script_args = list(command[1:])
+    script_path = Path(target)
 
     tracer = DefaultCoverageTracer()
     input_manager = DefaultInputManager()

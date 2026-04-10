@@ -110,6 +110,86 @@ class DefaultProcessManager:
             pid=proc.pid,
         )
 
+    def run_command(
+        self,
+        cmd: list[str],
+        timeout_seconds: int = 300,
+        memory_limit_mb: int | None = None,
+    ) -> ProcessResult:
+        """Run an arbitrary command as a subprocess.
+
+        Unlike run_script(), this does NOT prepend sys.executable.
+
+        Args:
+            cmd: Command and arguments to execute.
+            timeout_seconds: Maximum execution time in seconds.
+            memory_limit_mb: Memory limit in MB (uses RLIMIT_AS on Unix).
+
+        Returns:
+            ProcessResult with exit code, stdout, stderr, and metadata.
+        """
+        preexec_fn = None
+        if memory_limit_mb is not None and sys.platform != "win32":
+            limit_bytes = memory_limit_mb * 1024 * 1024
+
+            def _set_memory_limit() -> None:
+                resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
+
+            preexec_fn = _set_memory_limit
+
+        start = time.perf_counter()
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            preexec_fn=preexec_fn,
+        )
+
+        timed_out = False
+        memory_exceeded = False
+        exit_code = 0
+        stdout = ""
+        stderr = ""
+
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout_seconds)
+            exit_code = proc.returncode
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            proc.kill()
+            stdout, stderr = proc.communicate()
+            exit_code = proc.returncode
+
+        # Negative exit_code = killed by signal (e.g. SIGKILL from RLIMIT_AS)
+        if not timed_out and memory_limit_mb is not None and exit_code < 0:
+            memory_exceeded = True
+
+        if not timed_out and not memory_exceeded and memory_limit_mb is not None:
+            try:
+                import psutil
+
+                try:
+                    mem_usage = psutil.Process(proc.pid).memory_info().rss / 1024 / 1024
+                    if mem_usage > memory_limit_mb:
+                        memory_exceeded = True
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            except ImportError:
+                pass
+
+        elapsed = (time.perf_counter() - start) * 1000
+
+        return ProcessResult(
+            exit_code=exit_code,
+            stdout=stdout or "",
+            stderr=stderr or "",
+            timed_out=timed_out,
+            memory_exceeded=memory_exceeded,
+            duration_ms=elapsed,
+            pid=proc.pid,
+        )
+
     def kill_process(self, pid: int) -> None:
         """Kill a process by PID.
 

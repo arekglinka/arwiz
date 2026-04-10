@@ -13,8 +13,7 @@ console = Console()
 
 
 @click.command("profile")
-@click.argument("script", type=click.Path(exists=True))
-@click.option("--args", default="", help="Space-separated arguments for the script")
+@click.argument("command", nargs=-1, required=True)
 @click.option("--output", "-o", default=None, help="Output file path for results")
 @click.option(
     "--format",
@@ -23,15 +22,16 @@ console = Console()
     default="text",
     help="Output format",
 )
-def profile(script: str, args: str, output: str | None, fmt: str) -> None:
+def profile(command: tuple[str, ...], output: str | None, fmt: str) -> None:
     """Profile a Python script and identify hotspots."""
-    script_path = Path(script)
-    script_args = args.split() if args else []
+    target = command[0]
+    script_args = list(command[1:])
+    script_path = Path(target)
 
     profiler = DefaultProfiler()
     hotspot_detector = DefaultHotspotDetector()
 
-    with console.status(f"Profiling [bold]{script_path}[/bold]..."):
+    with console.status(f"Profiling [bold]{target}[/bold]..."):
         profile_result = profiler.profile_script(script_path, args=script_args)
         hotspots = hotspot_detector.detect_hotspots(profile_result)
 

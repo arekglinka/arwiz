@@ -13,17 +13,20 @@ console = Console()
 
 
 @click.command("optimize")
-@click.argument("script", type=click.Path(exists=True))
-@click.option("--function", "func_name", required=True, help="Target function name")
+@click.argument("command", nargs=-1, required=True)
+@click.option(
+    "--function", "func_name", default=None, help="Target function name (Python scripts only)"
+)
 @click.option(
     "--strategy",
     type=click.Choice(["auto", "llm", "template"]),
     default="auto",
     help="Optimization strategy",
 )
-def optimize(script: str, func_name: str, strategy: str) -> None:
+def optimize(command: tuple[str, ...], func_name: str | None, strategy: str) -> None:
     """Suggest optimizations for a specific function."""
-    script_path = Path(script)
+    target = command[0]
+    script_path = Path(target)
 
     with console.status("Running profile + optimize pipeline..."):
         orch = DefaultOrchestrator()
