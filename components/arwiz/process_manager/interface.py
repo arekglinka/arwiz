@@ -18,6 +18,7 @@ class ProcessManagerProtocol(Protocol):
         args: list[str] | None = None,
         timeout_seconds: int = 300,
         memory_limit_mb: int | None = None,
+        capture: bool = True,
     ) -> ProcessResult: ...
 
     def run_command(
@@ -25,6 +26,7 @@ class ProcessManagerProtocol(Protocol):
         cmd: list[str],
         timeout_seconds: int = 300,
         memory_limit_mb: int | None = None,
+        capture: bool = True,
     ) -> ProcessResult: ...
 
     def kill_process(self, pid: int) -> None: ...

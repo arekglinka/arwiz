@@ -98,6 +98,7 @@ class DefaultProfiler:
                 args=run_args,
                 timeout_seconds=timeout_seconds,
                 memory_limit_mb=memory_limit_mb,
+                capture=False,
             )
 
             if process_result.exit_code != 0 or not stats_path.exists():
@@ -150,6 +151,7 @@ class DefaultProfiler:
                 cmd=cmd,
                 timeout_seconds=timeout_seconds,
                 memory_limit_mb=memory_limit_mb,
+                capture=False,
             )
 
             if process_result.exit_code != 0 or not stats_path.exists():
