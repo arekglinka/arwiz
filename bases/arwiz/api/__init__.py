@@ -1,7 +1,4 @@
 # Brick: "bases/arwiz/api" = "arwiz/api"
-# TODO: add to pyproject.toml dependencies:
-#   fastapi>=0.115.0
-#   uvicorn>=0.34.0
 
 from arwiz.api.routes.coverage import router as coverage_router
 from arwiz.api.routes.health import router as health_router

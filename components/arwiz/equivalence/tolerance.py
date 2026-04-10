@@ -1,9 +1,29 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Generator
+from contextlib import contextmanager
 from typing import Any
 
 import numpy as np
+
+
+class _CircularRefError(Exception):
+    pass
+
+
+@contextmanager
+def _circular_guard(obj_a: object, obj_b: object, visited: set[int]) -> Generator[None]:
+    if id(obj_a) in visited or id(obj_b) in visited:
+        raise _CircularRefError()
+    visited.add(id(obj_a))
+    visited.add(id(obj_b))
+    try:
+        yield
+    finally:
+        visited.discard(id(obj_a))
+        visited.discard(id(obj_b))
+
 
 __all__ = ["is_close", "arrays_close", "deep_equal"]
 
@@ -78,68 +98,52 @@ def _deep_equal(a: Any, b: Any, tolerance: float, visited: set[int]) -> tuple[bo
         return False, f"None vs non-None: {a!r} vs {b!r}"
 
     if isinstance(a, dict) and isinstance(b, dict):
-        if id(a) in visited or id(b) in visited:
-            return True, "circular reference detected (assumed equivalent)"
-        visited.add(id(a))
-        visited.add(id(b))
         try:
-            if set(a.keys()) != set(b.keys()):
-                return False, (f"Dict keys differ: {set(a.keys())} vs {set(b.keys())}")
-            for k in a:
-                eq, reason = _deep_equal(a[k], b[k], tolerance, visited)
-                if not eq:
-                    return False, f"Dict key '{k}': {reason}"
-            return True, "Dicts are equivalent"
-        finally:
-            visited.discard(id(a))
-            visited.discard(id(b))
+            with _circular_guard(a, b, visited):
+                if set(a.keys()) != set(b.keys()):
+                    return False, (f"Dict keys differ: {set(a.keys())} vs {set(b.keys())}")
+                for k in a:
+                    eq, reason = _deep_equal(a[k], b[k], tolerance, visited)
+                    if not eq:
+                        return False, f"Dict key '{k}': {reason}"
+                return True, "Dicts are equivalent"
+        except _CircularRefError:
+            return True, "circular reference detected (assumed equivalent)"
 
     if isinstance(a, list) and isinstance(b, list):
-        if id(a) in visited or id(b) in visited:
-            return True, "circular reference detected (assumed equivalent)"
-        visited.add(id(a))
-        visited.add(id(b))
         try:
-            if len(a) != len(b):
-                return False, f"List length mismatch: {len(a)} vs {len(b)}"
-            for i, (ea, eb) in enumerate(zip(a, b, strict=False)):
-                eq, reason = _deep_equal(ea, eb, tolerance, visited)
-                if not eq:
-                    return False, f"List index {i}: {reason}"
-            return True, "Lists are equivalent"
-        finally:
-            visited.discard(id(a))
-            visited.discard(id(b))
+            with _circular_guard(a, b, visited):
+                if len(a) != len(b):
+                    return False, f"List length mismatch: {len(a)} vs {len(b)}"
+                for i, (ea, eb) in enumerate(zip(a, b, strict=False)):
+                    eq, reason = _deep_equal(ea, eb, tolerance, visited)
+                    if not eq:
+                        return False, f"List index {i}: {reason}"
+                return True, "Lists are equivalent"
+        except _CircularRefError:
+            return True, "circular reference detected (assumed equivalent)"
 
     if isinstance(a, tuple) and isinstance(b, tuple):
-        if id(a) in visited or id(b) in visited:
-            return True, "circular reference detected (assumed equivalent)"
-        visited.add(id(a))
-        visited.add(id(b))
         try:
-            if len(a) != len(b):
-                return False, f"Tuple length mismatch: {len(a)} vs {len(b)}"
-            for i, (ea, eb) in enumerate(zip(a, b, strict=False)):
-                eq, reason = _deep_equal(ea, eb, tolerance, visited)
-                if not eq:
-                    return False, f"Tuple index {i}: {reason}"
-            return True, "Tuples are equivalent"
-        finally:
-            visited.discard(id(a))
-            visited.discard(id(b))
+            with _circular_guard(a, b, visited):
+                if len(a) != len(b):
+                    return False, f"Tuple length mismatch: {len(a)} vs {len(b)}"
+                for i, (ea, eb) in enumerate(zip(a, b, strict=False)):
+                    eq, reason = _deep_equal(ea, eb, tolerance, visited)
+                    if not eq:
+                        return False, f"Tuple index {i}: {reason}"
+                return True, "Tuples are equivalent"
+        except _CircularRefError:
+            return True, "circular reference detected (assumed equivalent)"
 
     if isinstance(a, set) and isinstance(b, set):
-        if id(a) in visited or id(b) in visited:
-            return True, "circular reference detected (assumed equivalent)"
-        visited.add(id(a))
-        visited.add(id(b))
         try:
-            if a == b:
-                return True, "Sets are equal"
-            return False, f"Sets differ: {a} vs {b}"
-        finally:
-            visited.discard(id(a))
-            visited.discard(id(b))
+            with _circular_guard(a, b, visited):
+                if a == b:
+                    return True, "Sets are equal"
+                return False, f"Sets differ: {a} vs {b}"
+        except _CircularRefError:
+            return True, "circular reference detected (assumed equivalent)"
 
     if type(a) is type(b) and a == b:
         return True, f"Values equal: {a!r}"

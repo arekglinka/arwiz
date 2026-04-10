@@ -1,8 +1,6 @@
 from typing import Any
 from uuid import uuid4
 
-import httpx
-
 from ..foundation import HotSpot, LLMConfig, OptimizationAttempt
 from .prompts import (
     build_batch_io_prompt,
@@ -20,6 +18,80 @@ from .prompts import (
     build_vectorization_prompt,
 )
 from .providers import get_provider
+
+_STRATEGY_ALIASES: dict[str, str] = {
+    "vectorize": "vectorization",
+    "numpy": "vectorization",
+    "jit": "numba_jit",
+    "numba": "numba_jit",
+    "numba-parallel": "numba_parallel",
+    "batch-io": "batch_io",
+    "numexpr-evaluate": "numexpr",
+    "cupy-gpu": "cupy",
+    "jax_jit": "jax",
+    "rust": "pyo3",
+    "ffi": "cffi",
+    "cache": "caching",
+    "memoization": "caching",
+    "io": "batch_io",
+    "typed_memoryview": "cython",
+}
+
+_STRATEGY_PROMPTS: dict[str, tuple] = {
+    "vectorization": (
+        build_vectorization_prompt,
+        "Strategy hint: vectorize loops first, then simplify Python iteration overhead.",
+    ),
+    "numba_jit": (
+        build_numba_jit_prompt,
+        "Strategy hint: keep code nopython-friendly and prefer primitive numeric operations.",
+    ),
+    "numba_parallel": (
+        build_numba_parallel_prompt,
+        "Strategy hint: only parallelize loops with independent "
+        "iterations and replace range with prange where safe.",
+    ),
+    "cython": (
+        build_cython_prompt,
+        "Strategy hint: use typed memoryviews and Cython directives "
+        "to reduce bounds and wraparound overhead.",
+    ),
+    "caching": (
+        build_caching_prompt,
+        "Strategy hint: apply caching only when function output is deterministic for inputs.",
+    ),
+    "batch_io": (
+        build_batch_io_prompt,
+        "Strategy hint: reduce syscall frequency by aggregating writes/reads safely.",
+    ),
+    "numexpr": (
+        build_numexpr_prompt,
+        "Strategy hint: target simple element-wise arithmetic expressions "
+        "and use numexpr.evaluate for vectorized threaded evaluation.",
+    ),
+    "cupy": (
+        build_cupy_prompt,
+        "Strategy hint: transfer data to GPU with cp.asarray, use CuPy ops, "
+        "then convert results with cp.asnumpy.",
+    ),
+    "jax": (
+        build_jax_prompt,
+        "Strategy hint: replace NumPy operations with jax.numpy and "
+        "use @jax.jit on numerical hotspots for XLA compilation.",
+    ),
+    "pyo3": (
+        build_pyo3_prompt,
+        "Strategy hint: target string-heavy hotspots and generate Rust "
+        "PyO3 wrappers with #[pyfunction] and maturin develop build flow.",
+    ),
+    "cffi": (
+        build_cffi_prompt,
+        "Strategy hint: declare C API with ffi.cdef, compile via "
+        "ffi.verify, and keep a safe Python wrapper around C calls.",
+    ),
+}
+
+_MANIFEST_STRATEGIES = frozenset({"numba_jit"})
 
 
 class DefaultLLMOptimizer:
@@ -53,16 +125,6 @@ class DefaultLLMOptimizer:
                 effective_config.model,
                 max_tokens=effective_config.max_tokens,
                 temperature=effective_config.temperature,
-            )
-        except (httpx.TimeoutException, httpx.HTTPStatusError, httpx.ConnectError) as exc:
-            return OptimizationAttempt(
-                attempt_id=f"llm_{uuid4().hex[:12]}",
-                original_code=source_code,
-                optimized_code=source_code,
-                strategy="llm_generated",
-                llm_model=effective_config.model,
-                syntax_valid=False,
-                error_message=str(exc),
             )
         except Exception as exc:
             return OptimizationAttempt(
@@ -129,75 +191,16 @@ class DefaultLLMOptimizer:
                 "Choose the best backend based on this context and hotspot characteristics.\n"
             )
 
-        if normalized in {"vectorization", "vectorize", "numpy"}:
-            hint = "Strategy hint: vectorize loops first, then simplify Python iteration overhead."
-            return (
-                f"{build_vectorization_prompt(source_code, hotspot)}{profiling_context}\n{hint}\n"
-            )
-        if normalized in {"numba", "numba_jit", "jit"}:
-            hint = (
-                "Strategy hint: keep code nopython-friendly "
-                "and prefer primitive numeric operations."
-            )
-            return (
-                f"{build_numba_jit_prompt(source_code, hotspot)}{profiling_context}\n{hint}\n"
-                f"{manifest_suffix}"
-            )
-        if normalized in {"numba_parallel", "numba-parallel"}:
-            hint = (
-                "Strategy hint: only parallelize loops with independent "
-                "iterations and replace range with prange where safe."
-            )
-            return (
-                f"{build_numba_parallel_prompt(source_code, hotspot)}{profiling_context}\n{hint}\n"
-            )
-        if normalized in {"cython", "typed_memoryview"}:
-            hint = (
-                "Strategy hint: use typed memoryviews and Cython directives "
-                "to reduce bounds and wraparound overhead."
-            )
-            return f"{build_cython_prompt(source_code, hotspot)}{profiling_context}\n{hint}\n"
-        if normalized in {"caching", "cache", "memoization"}:
-            hint = (
-                "Strategy hint: apply caching only when function "
-                "output is deterministic for inputs."
-            )
-            return f"{build_caching_prompt(source_code, hotspot)}{profiling_context}\n{hint}\n"
-        if normalized in {"batch_io", "batch-io", "io"}:
-            hint = "Strategy hint: reduce syscall frequency by aggregating writes/reads safely."
-            return f"{build_batch_io_prompt(source_code, hotspot)}{profiling_context}\n{hint}\n"
-        if normalized in {"numexpr", "numexpr-evaluate"}:
-            hint = (
-                "Strategy hint: target simple element-wise arithmetic expressions "
-                "and use numexpr.evaluate for vectorized threaded evaluation."
-            )
-            return f"{build_numexpr_prompt(source_code, hotspot)}{profiling_context}\n{hint}\n"
-        if normalized in {"cupy", "cupy-gpu"}:
-            hint = (
-                "Strategy hint: transfer data to GPU with cp.asarray, "
-                "use CuPy ops, then convert results with cp.asnumpy."
-            )
-            return f"{build_cupy_prompt(source_code, hotspot)}{profiling_context}\n{hint}\n"
-        if normalized in {"jax", "jax_jit"}:
-            hint = (
-                "Strategy hint: replace NumPy operations with jax.numpy and "
-                "use @jax.jit on numerical hotspots for XLA compilation."
-            )
-            return f"{build_jax_prompt(source_code, hotspot)}{profiling_context}\n{hint}\n"
-        if normalized in {"pyo3", "rust"}:
-            hint = (
-                "Strategy hint: target string-heavy hotspots and generate Rust "
-                "PyO3 wrappers with #[pyfunction] and maturin develop build flow."
-            )
-            return f"{build_pyo3_prompt(source_code, hotspot)}{profiling_context}\n{hint}\n"
-        if normalized in {"cffi", "ffi"}:
-            hint = (
-                "Strategy hint: declare C API with ffi.cdef, compile via ffi.verify, "
-                "and keep a safe Python wrapper around C calls."
-            )
-            return f"{build_cffi_prompt(source_code, hotspot)}{profiling_context}\n{hint}\n"
-        if normalized in {"taichi"}:
+        if normalized == "taichi":
             return build_taichi_prompt(source_code, hotspot)
+
+        canonical = _STRATEGY_ALIASES.get(normalized, normalized)
+        entry = _STRATEGY_PROMPTS.get(canonical)
+        if entry is not None:
+            builder, hint = entry
+            suffix = manifest_suffix if canonical in _MANIFEST_STRATEGIES else ""
+            return f"{builder(source_code, hotspot)}{profiling_context}\n{hint}\n{suffix}"
+
         return (
             f"{build_numba_jit_prompt(source_code, hotspot)}{profiling_context}\n"
             "Strategy hint: JIT-compile hotspots.\n"

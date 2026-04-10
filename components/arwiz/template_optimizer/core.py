@@ -91,8 +91,4 @@ class DefaultTemplateOptimizer:
         if hotspot is not None and hotspot.call_count > 1:
             detected.append("add_caching")
 
-        unique: list[str] = []
-        for name in detected:
-            if name not in unique:
-                unique.append(name)
-        return unique
+        return list(dict.fromkeys(detected))

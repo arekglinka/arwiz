@@ -71,6 +71,24 @@ class DefaultOrchestrator:
             self._backend_selector = backend_selector
         self.last_pipeline_state: PipelineState | None = None
 
+    def _make_error_attempt(
+        self,
+        original_code: str,
+        strategy: str,
+        error: str,
+        template_name: str | None = None,
+        backend: str | None = None,
+    ) -> OptimizationAttempt:
+        return OptimizationAttempt(
+            attempt_id=f"opt_{uuid4().hex[:12]}",
+            original_code=original_code,
+            optimized_code="",
+            strategy=strategy,
+            template_name=template_name,
+            backend=backend,
+            error_message=error,
+        )
+
     def run_profile_optimize_pipeline(
         self,
         script_path: str,
@@ -110,12 +128,10 @@ class DefaultOrchestrator:
                 function_name=function_name,
                 file_path=script_path,
                 attempts=[
-                    OptimizationAttempt(
-                        attempt_id=f"opt_{uuid4().hex[:12]}",
+                    self._make_error_attempt(
                         original_code="",
-                        optimized_code="",
                         strategy=strategy,
-                        error_message=f"Pipeline failed before optimization: {exc}",
+                        error=f"Pipeline failed before optimization: {exc}",
                     )
                 ],
                 best_attempt=None,
@@ -153,12 +169,10 @@ class DefaultOrchestrator:
                     tolerance=cfg.equivalence_tolerance,
                 )
             except Exception as exc:
-                template_attempt = OptimizationAttempt(
-                    attempt_id=f"opt_{uuid4().hex[:12]}",
+                template_attempt = self._make_error_attempt(
                     original_code=original_source,
-                    optimized_code="",
                     strategy="template",
-                    error_message=str(exc),
+                    error=str(exc),
                 )
             attempts.append(template_attempt)
             return self._build_result(function_name, script_path, attempts)
@@ -198,14 +212,12 @@ class DefaultOrchestrator:
                         template_name=template_name,
                     )
                 except Exception as exc:
-                    backend_attempt = OptimizationAttempt(
-                        attempt_id=f"opt_{uuid4().hex[:12]}",
+                    backend_attempt = self._make_error_attempt(
                         original_code=original_source,
-                        optimized_code="",
                         strategy="template",
+                        error=str(exc),
                         template_name=template_name,
                         backend=backend_name,
-                        error_message=str(exc),
                     )
                 attempts.append(backend_attempt)
                 if backend_attempt.syntax_valid and backend_attempt.passed_equivalence:
@@ -230,14 +242,12 @@ class DefaultOrchestrator:
                         template_name=template_name,
                     )
                 except Exception as exc:
-                    backend_attempt = OptimizationAttempt(
-                        attempt_id=f"opt_{uuid4().hex[:12]}",
+                    backend_attempt = self._make_error_attempt(
                         original_code=original_source,
-                        optimized_code="",
                         strategy="template",
+                        error=str(exc),
                         template_name=template_name,
                         backend=backend_name,
-                        error_message=str(exc),
                     )
             else:
                 backend_attempt = OptimizationAttempt(
@@ -265,12 +275,10 @@ class DefaultOrchestrator:
                 tolerance=cfg.equivalence_tolerance,
             )
         except Exception as exc:
-            llm_attempt = OptimizationAttempt(
-                attempt_id=f"opt_{uuid4().hex[:12]}",
+            llm_attempt = self._make_error_attempt(
                 original_code=original_source,
-                optimized_code="",
                 strategy="llm",
-                error_message=str(exc),
+                error=str(exc),
             )
         attempts.append(llm_attempt)
         return self._build_result(function_name, script_path, attempts)

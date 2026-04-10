@@ -16,8 +16,3 @@ cli.add_command(coverage)
 cli.add_command(report)
 
 __all__ = ["cli", "profile", "optimize", "coverage", "report"]
-
-# NOTE: Add to pyproject.toml [project.scripts]:
-# arwiz = "arwiz.cli:cli"
-# NOTE: Add to pyproject.toml [tool.polylith.bricks]:
-# "bases/arwiz/cli" = "arwiz/cli"

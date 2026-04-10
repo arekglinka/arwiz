@@ -1,18 +1,7 @@
 import os
 from typing import Any, Protocol
 
-try:
-    import httpx
-except ImportError:
-
-    class _HttpxFallback:
-        @staticmethod
-        def post(*_args: object, **_kwargs: object) -> object:
-            msg = "httpx is required for provider calls"
-            raise RuntimeError(msg)
-
-    httpx = _HttpxFallback()
-
+import httpx
 from arwiz.foundation import LLMConfig
 
 

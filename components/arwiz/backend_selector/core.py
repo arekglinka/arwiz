@@ -29,7 +29,7 @@ class DefaultBackendSelector:
 
         if tree is None:
             tree = ast.parse(source_code)
-        vectorized_ops = {
+        _all_safe_np_calls = {
             "dot",
             "sum",
             "mean",
@@ -47,9 +47,6 @@ class DefaultBackendSelector:
             "sort",
             "argsort",
             "cross",
-        }
-
-        numpy_constructors = {
             "array",
             "zeros",
             "ones",
@@ -101,7 +98,7 @@ class DefaultBackendSelector:
                 if (
                     isinstance(func.value, ast.Name)
                     and func.value.id in {"np", "numpy"}
-                    and func.attr in (vectorized_ops | numpy_constructors)
+                    and func.attr in _all_safe_np_calls
                 ):
                     continue
                 return False
