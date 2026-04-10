@@ -50,6 +50,8 @@ The `examples/` directory contains runnable demo scripts:
 | `examples/02_real_world.py` | Pandas data processing with slow `iterrows` and `apply` patterns |
 | `examples/03_api_usage.py` | Programmatic API usage and FastAPI client example |
 | `examples/api_curl.sh` | curl examples for all 4 API endpoints |
+| `examples/monte_carlo_pi/monte_carlo_pi_numpy.py` | Monte Carlo Pi estimation - NumPy baseline for arwiz optimization |
+| `examples/monte_carlo_pi/monte_carlo_pi_jax.py` | Monte Carlo Pi estimation - JAX optimized (arwiz-generated) |
 
 Try the quickstart:
 
@@ -203,7 +205,7 @@ $ uv run pytest --cov=arwiz --cov-report=term-missing
 | `test/integration/` | End-to-end pipeline tests |
 | `test/test_architecture.py` | AST-based architecture validation |
 
-350 tests across 25 test files.
+ 490 tests across 34 test files.
 
 ### Things to know
 
@@ -262,7 +264,7 @@ arwiz/
     cli/                   # Click-based CLI
     streamlit_ui/          # Streamlit dashboard
     api/                   # FastAPI REST API
-  test/                    # 350 tests
+  test/                    # 490 tests
     foundation/types/      # Model validation tests
     fixtures/              # Target scripts and fixtures
     components/            # Component unit tests
