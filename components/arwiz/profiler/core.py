@@ -59,6 +59,7 @@ class DefaultProfiler:
             wrapper_code = textwrap.dedent(
                 """
                 import cProfile
+                import os
                 import runpy
                 import sys
 
@@ -68,6 +69,7 @@ class DefaultProfiler:
                     argv = sys.argv[3:]
                     profiler = cProfile.Profile()
                     sys.argv = [script, *argv]
+                    sys.path.insert(0, os.getcwd())
                     profiler.enable()
                     try:
                         runpy.run_path(script, run_name="__main__")

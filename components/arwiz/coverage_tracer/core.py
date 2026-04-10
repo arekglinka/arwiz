@@ -18,6 +18,7 @@ from arwiz.foundation import BranchCoverage, BranchInfo
 from arwiz.process_manager import DefaultProcessManager
 
 _TRACE_WRAPPER = """\
+import os
 import sys
 import json
 import runpy
@@ -30,6 +31,7 @@ def _tracer(frame, event, arg):
     return _tracer
 
 sys.settrace(_tracer)
+sys.path.insert(0, os.getcwd())
 sys.argv = [{target_path!r}] + sys.argv[1:]
 try:
     runpy.run_path({target_path!r}, run_name="__main__")
